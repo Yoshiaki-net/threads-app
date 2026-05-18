@@ -1,0 +1,51 @@
+databases:
+  - name: threads-db
+    databaseName: threads_app
+    user: threads_user
+    plan: free
+
+services:
+  # Backend API
+  - type: web
+    name: threads-backend
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    plan: free
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: threads-db
+          property: connectionString
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: THREADS_APP_ID
+        sync: false
+      - key: THREADS_APP_SECRET
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: DISCORD_WEBHOOK_URL
+        sync: false
+
+  # Frontend
+  - type: web
+    name: threads-frontend
+    runtime: node
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    plan: free
+    envVars:
+      - key: BACKEND_URL
+        fromService:
+          name: threads-backend
+          type: web
+          property: host
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3000"

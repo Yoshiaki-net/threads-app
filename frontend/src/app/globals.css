@@ -1,0 +1,22 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --primary: #1E3464;
+  --primary-light: #EEF1F8;
+  --gold: #C9A84C;
+  --gold-light: #FDF8EE;
+}
+
+body {
+  background-color: #F5F6FA;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in {
+  animation: fade-in 0.2s ease-out;
+}
