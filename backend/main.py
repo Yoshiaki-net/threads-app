@@ -12,6 +12,24 @@ from core.config import settings
 
 Base.metadata.create_all(bind=engine)
 
+def promote_admin():
+    """Promote ADMIN_EMAIL to admin on startup if set."""
+    if not settings.admin_email:
+        return
+    from database import SessionLocal
+    from models import User
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.email == settings.admin_email).first()
+        if user and not user.is_admin:
+            user.is_admin = True
+            db.commit()
+            print(f"[Admin] Promoted {settings.admin_email} to admin.")
+    finally:
+        db.close()
+
+promote_admin()
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     start_scheduler()

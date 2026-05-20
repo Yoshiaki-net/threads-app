@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./threads_app.db"
     frontend_url: str = "http://localhost:3000"
     allowed_origins: str = "http://localhost:3000"
+    admin_email: str = ""
 
     @property
     def cors_origins(self) -> List[str]:
