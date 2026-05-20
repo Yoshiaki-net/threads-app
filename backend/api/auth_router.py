@@ -40,15 +40,18 @@ async def register(data: RegisterRequest, db: Session = Depends(get_db)):
 
 @router.post("/login")
 async def login(data: LoginRequest, db: Session = Depends(get_db)):
+    from datetime import datetime
     user = db.query(User).filter(User.email == data.email).first()
     if not user or not verify_password(data.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="メールアドレスまたはパスワードが正しくありません")
+    user.last_login_at = datetime.utcnow()
+    db.commit()
     token = create_access_token({"sub": user.email})
-    return {"access_token": token, "token_type": "bearer", "user": {"id": user.id, "email": user.email, "name": user.name}}
+    return {"access_token": token, "token_type": "bearer", "user": {"id": user.id, "email": user.email, "name": user.name, "is_admin": user.is_admin}}
 
-@router.get("/me", response_model=UserResponse)
+@router.get("/me")
 async def me(current_user: User = Depends(get_current_user)):
-    return current_user
+    return {"id": current_user.id, "email": current_user.email, "name": current_user.name, "is_admin": current_user.is_admin}
 
 @router.get("/me/threads-status")
 async def threads_status(current_user: User = Depends(get_current_user)):

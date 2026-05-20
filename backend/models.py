@@ -10,7 +10,9 @@ class User(Base):
     hashed_password = Column(String)
     name = Column(String, default="")
     is_active = Column(Boolean, default=True)
+    is_admin = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+    last_login_at = Column(DateTime, nullable=True)
     threads_access_token = Column(String, nullable=True)
     threads_user_id = Column(String, nullable=True)
     threads_username = Column(String, nullable=True)
@@ -58,7 +60,7 @@ class Post(Base):
     __tablename__ = "posts"
     id = Column(Integer, primary_key=True, index=True)
     content = Column(Text)
-    status = Column(String, default="draft")  # draft, scheduled, published, failed
+    status = Column(String, default="draft")
     threads_post_id = Column(String, nullable=True)
     knowledge_base_id = Column(Integer, ForeignKey("knowledge_base.id"), nullable=True)
     source_post_id = Column(Integer, ForeignKey("posts.id"), nullable=True)

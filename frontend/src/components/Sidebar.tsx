@@ -1,7 +1,7 @@
 'use client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Users, BookOpen, FileText, Calendar, LayoutDashboard, Settings, X, BarChart2 } from 'lucide-react'
+import { Users, BookOpen, FileText, Calendar, LayoutDashboard, Settings, X, BarChart2, ShieldCheck } from 'lucide-react'
 import { logout, getUser } from '@/lib/auth'
 
 const nav = [
@@ -48,13 +48,31 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
             {label}
           </Link>
         ))}
+        {/* Admin menu - only shown for admin users */}
+        {user?.is_admin && (
+          <Link
+            href="/admin"
+            onClick={onClose}
+            className={`flex items-center gap-3 px-4 py-2.5 text-sm font-medium transition-colors mt-2 ${
+              path === '/admin'
+                ? 'border-l-4 border-[#C9A84C] bg-[#EEF1F8] text-[#1E3464] pl-3'
+                : 'border-l-4 border-transparent text-gray-500 hover:bg-gray-50 hover:text-[#1E3464] pl-3'
+            }`}
+          >
+            <ShieldCheck size={16} className={path === '/admin' ? 'text-[#C9A84C]' : ''} />
+            管理者ページ
+          </Link>
+        )}
       </nav>
       <div className="p-4 border-t border-gray-100">
         <div className="flex items-center gap-2 mb-3">
           <div className="w-7 h-7 rounded-full bg-[#EEF1F8] flex items-center justify-center text-[#1E3464] text-xs font-bold shrink-0">
             {user?.name?.[0]?.toUpperCase() || 'U'}
           </div>
-          <span className="text-xs text-gray-600 truncate">{user?.email || ''}</span>
+          <div className="min-w-0">
+            <span className="text-xs text-gray-600 truncate block">{user?.email || ''}</span>
+            {user?.is_admin && <span className="text-xs text-[#C9A84C] font-medium">管理者</span>}
+          </div>
         </div>
         <button onClick={logout} className="w-full text-left text-xs text-gray-400 hover:text-red-500 transition-colors">
           ログアウト

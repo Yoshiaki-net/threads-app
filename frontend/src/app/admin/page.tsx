@@ -1,0 +1,169 @@
+'use client'
+import { useEffect, useState } from 'react'
+import { adminApi } from '@/lib/api'
+import { toast } from '@/components/Toast'
+import { Users, FileText, BookOpen, TrendingUp, Shield, ShieldOff, UserX, RefreshCw } from 'lucide-react'
+
+export default function AdminPage() {
+  const [users, setUsers] = useState<any[]>([])
+  const [stats, setStats] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+
+  const load = async () => {
+    setLoading(true)
+    try {
+      const [u, s] = await Promise.all([adminApi.listUsers(), adminApi.getStats()])
+      setUsers(u)
+      setStats(s)
+    } catch {
+      toast.error('管理者権限が必要です')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { load() }, [])
+
+  const toggleAdmin = async (id: number) => {
+    try {
+      await adminApi.toggleAdmin(id)
+      toast.success('権限を更新しました')
+      load()
+    } catch { toast.error('更新に失敗しました') }
+  }
+
+  const toggleActive = async (id: number) => {
+    try {
+      await adminApi.toggleActive(id)
+      toast.success('ステータスを更新しました')
+      load()
+    } catch { toast.error('更新に失敗しました') }
+  }
+
+  const deleteUser = async (id: number, email: string) => {
+    if (!confirm(`${email} を削除しますか？`)) return
+    try {
+      await adminApi.deleteUser(id)
+      toast.success('削除しました')
+      load()
+    } catch { toast.error('削除に失敗しました') }
+  }
+
+  if (loading) return (
+    <div className="flex items-center justify-center min-h-[400px]">
+      <div className="w-8 h-8 border-4 border-[#C9A84C] border-t-transparent rounded-full animate-spin" />
+    </div>
+  )
+
+  return (
+    <div>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h2 className="text-xl md:text-2xl font-bold text-gray-900">管理者ダッシュボード</h2>
+          <p className="text-sm text-gray-500 mt-1">ユーザー管理・利用状況の確認</p>
+        </div>
+        <button onClick={load} className="flex items-center gap-2 px-3 py-2 bg-gray-100 rounded-xl text-sm hover:bg-gray-200 transition-colors">
+          <RefreshCw size={14} /> 更新
+        </button>
+      </div>
+
+      {/* Stats */}
+      {stats && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          {[
+            { label: '登録ユーザー', value: stats.total_users, icon: Users, color: '#1E3464' },
+            { label: '総投稿数', value: stats.total_posts, icon: FileText, color: '#C9A84C' },
+            { label: '公開済み', value: stats.published_posts, icon: TrendingUp, color: '#10b981' },
+            { label: 'ナレッジ', value: stats.total_knowledge, icon: BookOpen, color: '#8b5cf6' },
+          ].map(s => (
+            <div key={s.label} className="bg-white rounded-2xl shadow-sm p-4 border border-gray-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: s.color + '20' }}>
+                  <s.icon size={20} style={{ color: s.color }} />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-gray-900">{s.value}</p>
+                  <p className="text-xs text-gray-500">{s.label}</p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* User list */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="p-4 border-b border-gray-100">
+          <h3 className="font-semibold text-gray-800 text-sm">ユーザー一覧 ({users.length}名)</h3>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-gray-50 text-gray-500 text-xs">
+                <th className="text-left px-4 py-3 font-medium">ユーザー</th>
+                <th className="text-left px-4 py-3 font-medium hidden md:table-cell">登録日</th>
+                <th className="text-left px-4 py-3 font-medium hidden md:table-cell">最終ログイン</th>
+                <th className="text-center px-4 py-3 font-medium">投稿</th>
+                <th className="text-center px-4 py-3 font-medium hidden md:table-cell">公開</th>
+                <th className="text-center px-4 py-3 font-medium hidden md:table-cell">ナレッジ</th>
+                <th className="text-center px-4 py-3 font-medium">Threads</th>
+                <th className="text-center px-4 py-3 font-medium">操作</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {users.map(u => (
+                <tr key={u.id} className={`hover:bg-gray-50 transition-colors ${!u.is_active ? 'opacity-50' : ''}`}>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold"
+                        style={{ background: 'linear-gradient(135deg, #1E3464, #C9A84C)' }}>
+                        {(u.name || u.email)[0].toUpperCase()}
+                      </div>
+                      <div>
+                        <div className="font-medium text-gray-900 flex items-center gap-1">
+                          {u.name || u.email.split('@')[0]}
+                          {u.is_admin && <span className="text-xs bg-[#1E3464] text-white px-1.5 py-0.5 rounded-full">管理者</span>}
+                        </div>
+                        <div className="text-xs text-gray-400">{u.email}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-gray-500 hidden md:table-cell">
+                    {u.created_at ? new Date(u.created_at).toLocaleDateString('ja-JP') : '-'}
+                  </td>
+                  <td className="px-4 py-3 text-gray-500 hidden md:table-cell">
+                    {u.last_login_at ? new Date(u.last_login_at).toLocaleDateString('ja-JP') : '-'}
+                  </td>
+                  <td className="px-4 py-3 text-center font-medium text-gray-700">{u.post_count}</td>
+                  <td className="px-4 py-3 text-center text-green-600 hidden md:table-cell">{u.published_count}</td>
+                  <td className="px-4 py-3 text-center text-purple-600 hidden md:table-cell">{u.knowledge_count}</td>
+                  <td className="px-4 py-3 text-center">
+                    {u.threads_connected
+                      ? <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">@{u.threads_username || '連携済'}</span>
+                      : <span className="text-xs bg-gray-100 text-gray-400 px-2 py-1 rounded-full">未連携</span>}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center justify-center gap-1">
+                      <button onClick={() => toggleAdmin(u.id)} title={u.is_admin ? '管理者解除' : '管理者にする'}
+                        className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
+                        {u.is_admin ? <ShieldOff size={14} className="text-[#1E3464]" /> : <Shield size={14} className="text-gray-400 hover:text-[#1E3464]" />}
+                      </button>
+                      <button onClick={() => toggleActive(u.id)} title={u.is_active ? '無効にする' : '有効にする'}
+                        className={`text-xs px-2 py-1 rounded-lg transition-colors ${u.is_active ? 'bg-gray-100 text-gray-600 hover:bg-red-50 hover:text-red-500' : 'bg-green-100 text-green-600 hover:bg-green-200'}`}>
+                        {u.is_active ? '無効' : '有効'}
+                      </button>
+                      <button onClick={() => deleteUser(u.id, u.email)} title="削除"
+                        className="p-1.5 rounded-lg hover:bg-red-50 transition-colors">
+                        <UserX size={14} className="text-gray-300 hover:text-red-400" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  )
+}

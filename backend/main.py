@@ -7,6 +7,7 @@ from api import competitors, knowledge, posts, scheduler
 from api.auth_router import router as auth_router
 from api.threads_oauth import router as threads_oauth_router
 from api.user_settings import router as settings_router
+from api.admin import router as admin_router
 from core.config import settings
 
 Base.metadata.create_all(bind=engine)
@@ -34,6 +35,7 @@ app.include_router(competitors.router)
 app.include_router(knowledge.router)
 app.include_router(posts.router)
 app.include_router(scheduler.router)
+app.include_router(admin_router)
 
 @app.get("/health")
 async def health():

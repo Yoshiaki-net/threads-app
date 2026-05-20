@@ -70,6 +70,14 @@ export const authApi = {
   me: () => api.get('/auth/me').then(r => r.data),
 }
 
+export const adminApi = {
+  listUsers: () => api.get('/admin/users').then(r => r.data),
+  getStats: () => api.get('/admin/stats').then(r => r.data),
+  toggleAdmin: (id: number) => api.patch(`/admin/users/${id}/toggle-admin`).then(r => r.data),
+  toggleActive: (id: number) => api.patch(`/admin/users/${id}/toggle-active`).then(r => r.data),
+  deleteUser: (id: number) => api.delete(`/admin/users/${id}`).then(r => r.data),
+}
+
 export const userSettingsApi = {
   get: () => api.get('/settings/').then(r => r.data),
   update: (data: Partial<{
