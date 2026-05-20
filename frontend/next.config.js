@@ -1,7 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   async rewrites() {
-    const backendUrl = process.env.BACKEND_URL || 'http://localhost:8000'
+    const rawUrl = process.env.BACKEND_URL || 'http://localhost:8000'
+    // Render's fromService.host returns hostname without protocol, so add https:// if needed
+    const backendUrl = rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`
     return [
       {
         source: '/api/:path*',
