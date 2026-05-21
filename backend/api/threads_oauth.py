@@ -94,3 +94,20 @@ async def disconnect(db: Session = Depends(get_db), current_user: User = Depends
     current_user.threads_username = None
     db.commit()
     return {"ok": True}
+
+@router.post("/data-deletion")
+async def data_deletion(request: Request, db: Session = Depends(get_db)):
+    """Meta required data deletion callback."""
+    try:
+        body = await request.json()
+        threads_user_id = body.get("user_id", "")
+        if threads_user_id:
+            user = db.query(User).filter(User.threads_user_id == threads_user_id).first()
+            if user:
+                user.threads_access_token = None
+                user.threads_user_id = None
+                user.threads_username = None
+                db.commit()
+    except Exception:
+        pass
+    return {"status": "ok"}
