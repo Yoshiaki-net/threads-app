@@ -15,6 +15,11 @@ class Settings(BaseSettings):
     allowed_origins: str = "http://localhost:3000"
     admin_email: str = ""
     invite_only: bool = False
+    smtp_host: str = ""
+    smtp_port: str = "465"
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""
 
     @property
     def cors_origins(self) -> List[str]:

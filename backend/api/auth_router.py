@@ -80,3 +80,28 @@ async def threads_status(current_user: User = Depends(get_current_user)):
         "username": current_user.threads_username or "",
         "user_id": current_user.threads_user_id or "",
     }
+
+class PasswordChangeRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+class ProfileUpdateRequest(BaseModel):
+    name: str
+
+@router.patch("/password")
+async def change_password(data: PasswordChangeRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if not verify_password(data.current_password, current_user.hashed_password):
+        raise HTTPException(status_code=400, detail="現在のパスワードが正しくありません")
+    if len(data.new_password) < 8:
+        raise HTTPException(status_code=400, detail="パスワードは8文字以上にしてください")
+    current_user.hashed_password = hash_password(data.new_password)
+    db.commit()
+    return {"ok": True}
+
+@router.patch("/profile")
+async def update_profile(data: ProfileUpdateRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if not data.name.strip():
+        raise HTTPException(status_code=400, detail="名前を入力してください")
+    current_user.name = data.name.strip()
+    db.commit()
+    return {"id": current_user.id, "email": current_user.email, "name": current_user.name, "is_admin": current_user.is_admin}

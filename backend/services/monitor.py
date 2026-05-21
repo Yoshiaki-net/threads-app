@@ -96,6 +96,12 @@ async def check_competitor_posts():
                             avg_likes=avg_likes,
                             webhook_url=discord_webhook_url,
                         )
+                        # Email notification
+                        if user_settings and user_settings.email_notifications_enabled:
+                            from services.email_service import send_buzz_email
+                            email = user_settings.notification_email
+                            if email:
+                                await send_buzz_email(email, competitor.username, post_data.get("text", ""), likes)
 
                 await client.close()
             except Exception as e:

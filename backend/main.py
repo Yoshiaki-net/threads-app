@@ -41,6 +41,9 @@ def run_migrations():
             "ALTER TABLE competitors ADD COLUMN IF NOT EXISTS last_fetched_at TIMESTAMP",
             "ALTER TABLE competitors ADD COLUMN IF NOT EXISTS followers_count_updated_at TIMESTAMP",
             engagement_history_ddl,
+            "ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS email_notifications_enabled BOOLEAN DEFAULT FALSE",
+            "ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS notification_email VARCHAR",
+            "ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS weekly_report_enabled BOOLEAN DEFAULT FALSE",
         ]
         for stmt in stmts:
             try:

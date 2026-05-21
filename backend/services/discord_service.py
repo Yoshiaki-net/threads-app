@@ -29,6 +29,13 @@ async def send_buzz_notification(competitor_username: str, post_text: str, likes
             json={"embeds": [embed]},
         )
 
+async def send_discord_message(webhook_url: str, content: str):
+    """シンプルなテキストメッセージをDiscordに送信する。"""
+    if not webhook_url:
+        return
+    async with httpx.AsyncClient() as client:
+        await client.post(webhook_url, json={"content": content})
+
 async def send_post_published_notification(post_content: str, threads_post_id: str):
     if not settings.discord_webhook_url:
         return

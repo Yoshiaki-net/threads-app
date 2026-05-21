@@ -1,7 +1,7 @@
 'use client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Users, BookOpen, FileText, Calendar, LayoutDashboard, Settings, X, BarChart2, ShieldCheck } from 'lucide-react'
+import { Users, BookOpen, FileText, Calendar, LayoutDashboard, Settings, X, BarChart2, ShieldCheck, UserCircle } from 'lucide-react'
 import { logout, getUser } from '@/lib/auth'
 
 const nav = [
@@ -74,6 +74,9 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
             {user?.is_admin && <span className="text-xs text-[#C9A84C] font-medium">管理者</span>}
           </div>
         </div>
+        <Link href="/profile" onClick={onClose} className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-[#1E3464] transition-colors mb-2">
+          <UserCircle size={13} /> プロフィール設定
+        </Link>
         <button onClick={logout} className="w-full text-left text-xs text-gray-400 hover:text-red-500 transition-colors">
           ログアウト
         </button>

@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 from database import get_db
-from models import Post, KnowledgeBase, User, Competitor
-from services.ai_service import generate_post, generate_similar_post, analyze_competitor_post
+from models import Post, KnowledgeBase, User, Competitor, CompetitorPost
+from services.ai_service import generate_post, generate_posts_multi, generate_similar_post, analyze_competitor_post
 from auth import get_current_user
 
 router = APIRouter(prefix="/api/posts", tags=["posts"])
@@ -16,6 +16,10 @@ class PostCreate(BaseModel):
 class GenerateRequest(BaseModel):
     knowledge_id: int
     custom_prompt: str = ""
+    style: str = ""
+    tone_override: str = ""
+    use_buzz_posts: bool = False
+    count: int = 1  # 1 or 3
 
 class SimilarRequest(BaseModel):
     post_id: int
@@ -51,33 +55,63 @@ async def generate(data: GenerateRequest, db: Session = Depends(get_db), current
     if not kb:
         raise HTTPException(status_code=404, detail="KnowledgeBase not found")
 
-    content = generate_post(
-        knowledge_content=kb.content,
-        tone=kb.tone,
-        topics=kb.topics,
-        prompt=data.custom_prompt,
-    )
-    post = Post(content=content, knowledge_base_id=kb.id, user_id=current_user.id)
-    db.add(post)
-    db.commit()
-    db.refresh(post)
-    return post
+    tone = data.tone_override or kb.tone
+
+    # Fetch buzz posts if requested
+    buzz_posts = []
+    if data.use_buzz_posts:
+        buzz_raw = (
+            db.query(CompetitorPost)
+            .join(Competitor)
+            .filter(CompetitorPost.is_buzz == True, Competitor.user_id == current_user.id)
+            .order_by(CompetitorPost.likes_count.desc())
+            .limit(5)
+            .all()
+        )
+        buzz_posts = [{"text": p.text, "likes_count": p.likes_count} for p in buzz_raw]
+
+    count = max(1, min(data.count, 5))
+
+    if count > 1:
+        contents = generate_posts_multi(
+            knowledge_content=kb.content,
+            tone=tone,
+            topics=kb.topics,
+            prompt=data.custom_prompt,
+            style=data.style,
+            buzz_posts=buzz_posts,
+            count=count,
+        )
+        posts = []
+        for content in contents:
+            post = Post(content=content, knowledge_base_id=kb.id, user_id=current_user.id)
+            db.add(post)
+            db.commit()
+            db.refresh(post)
+            posts.append(post)
+        return posts
+    else:
+        content = generate_post(
+            knowledge_content=kb.content,
+            tone=tone,
+            topics=kb.topics,
+            prompt=data.custom_prompt,
+        )
+        post = Post(content=content, knowledge_base_id=kb.id, user_id=current_user.id)
+        db.add(post)
+        db.commit()
+        db.refresh(post)
+        return post
 
 @router.post("/{post_id}/similar")
 async def generate_similar(post_id: int, data: SimilarRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     original = db.query(Post).filter(Post.id == post_id, Post.user_id == current_user.id).first()
     if not original:
         raise HTTPException(status_code=404, detail="Post not found")
-
     kb = db.query(KnowledgeBase).filter(KnowledgeBase.id == data.knowledge_id, KnowledgeBase.user_id == current_user.id).first()
     if not kb:
         raise HTTPException(status_code=404, detail="KnowledgeBase not found")
-
-    content = generate_similar_post(
-        original_post=original.content,
-        knowledge_content=kb.content,
-        tone=kb.tone,
-    )
+    content = generate_similar_post(original_post=original.content, knowledge_content=kb.content, tone=kb.tone)
     new_post = Post(content=content, knowledge_base_id=kb.id, source_post_id=post_id, user_id=current_user.id)
     db.add(new_post)
     db.commit()
@@ -97,7 +131,6 @@ async def get_analytics(db: Session = Depends(get_db), current_user: User = Depe
     from sqlalchemy import func
     from datetime import datetime, timedelta
 
-    # Top posts by likes
     top_posts = (
         db.query(Post)
         .filter(Post.user_id == current_user.id, Post.status == "published", Post.likes_count > 0)
@@ -105,16 +138,12 @@ async def get_analytics(db: Session = Depends(get_db), current_user: User = Depe
         .limit(10)
         .all()
     )
-
-    # Status breakdown
     status_counts = (
         db.query(Post.status, func.count(Post.id))
         .filter(Post.user_id == current_user.id)
         .group_by(Post.status)
         .all()
     )
-
-    # Posts per week (last 8 weeks)
     weeks = []
     for i in range(7, -1, -1):
         week_start = datetime.utcnow() - timedelta(weeks=i+1)
@@ -124,10 +153,8 @@ async def get_analytics(db: Session = Depends(get_db), current_user: User = Depe
             Post.created_at >= week_start,
             Post.created_at < week_end,
         ).scalar()
-        label = f"{week_start.month}/{week_start.day}"
-        weeks.append({"week": label, "count": count or 0})
+        weeks.append({"week": f"{week_start.month}/{week_start.day}", "count": count or 0})
 
-    # Total stats
     total_posts = db.query(func.count(Post.id)).filter(Post.user_id == current_user.id).scalar()
     total_published = db.query(func.count(Post.id)).filter(Post.user_id == current_user.id, Post.status == "published").scalar()
     total_likes = db.query(func.sum(Post.likes_count)).filter(Post.user_id == current_user.id).scalar() or 0

@@ -47,8 +47,14 @@ export const postApi = {
   list: (status?: string) => api.get('/posts/', { params: status ? { status } : {} }).then(r => r.data),
   create: (content: string, tags = '') => api.post('/posts/', { content, tags }).then(r => r.data),
   delete: (id: number) => api.delete(`/posts/${id}`).then(r => r.data),
-  generate: (knowledge_id: number, custom_prompt = '') =>
-    api.post('/posts/generate', { knowledge_id, custom_prompt }).then(r => r.data),
+  generate: (params: {
+    knowledge_id: number
+    custom_prompt?: string
+    style?: string
+    tone_override?: string
+    use_buzz_posts?: boolean
+    count?: number
+  }) => api.post('/posts/generate', params).then(r => r.data),
   similar: (post_id: number, knowledge_id: number) =>
     api.post(`/posts/${post_id}/similar`, { post_id, knowledge_id }).then(r => r.data),
   analyzeCompetitor: (text: string) =>
@@ -73,6 +79,10 @@ export const authApi = {
     api.post('/auth/login', { email, password }).then(r => r.data),
   me: () => api.get('/auth/me').then(r => r.data),
   inviteOnlyStatus: () => api.get('/auth/invite-only').then(r => r.data),
+  changePassword: (current_password: string, new_password: string) =>
+    api.patch('/auth/password', { current_password, new_password }).then(r => r.data),
+  updateProfile: (name: string) =>
+    api.patch('/auth/profile', { name }).then(r => r.data),
 }
 
 export const adminApi = {
@@ -95,6 +105,10 @@ export const userSettingsApi = {
     buzz_multiplier: number
     monitor_interval_minutes: number
     notifications_enabled: boolean
+    email_notifications_enabled: boolean
+    notification_email: string
+    weekly_report_enabled: boolean
   }>) => api.put('/settings/', data).then(r => r.data),
   testDiscord: () => api.post('/settings/test-discord').then(r => r.data),
+  testEmail: () => api.post('/settings/test-email').then(r => r.data),
 }

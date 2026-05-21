@@ -111,4 +111,7 @@ class UserSettings(Base):
     buzz_multiplier = Column(Float, default=3.0)
     monitor_interval_minutes = Column(Integer, default=30)
     notifications_enabled = Column(Boolean, default=True)
+    email_notifications_enabled = Column(Boolean, default=False)
+    notification_email = Column(String, nullable=True)
+    weekly_report_enabled = Column(Boolean, default=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
