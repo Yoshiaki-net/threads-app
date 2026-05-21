@@ -15,11 +15,32 @@ Base.metadata.create_all(bind=engine)
 def run_migrations():
     """Add new columns to existing tables without dropping data."""
     from sqlalchemy import text
+    is_sqlite = settings.database_url.startswith("sqlite")
+    if is_sqlite:
+        engagement_history_ddl = (
+            "CREATE TABLE IF NOT EXISTS competitor_engagement_history "
+            "(id INTEGER PRIMARY KEY, competitor_id INTEGER REFERENCES competitors(id), "
+            "avg_likes REAL DEFAULT 0, posts_count INTEGER DEFAULT 0, "
+            "followers_count INTEGER DEFAULT 0, recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+        )
+    else:
+        engagement_history_ddl = (
+            "CREATE TABLE IF NOT EXISTS competitor_engagement_history "
+            "(id SERIAL PRIMARY KEY, competitor_id INTEGER REFERENCES competitors(id), "
+            "avg_likes FLOAT DEFAULT 0, posts_count INTEGER DEFAULT 0, "
+            "followers_count INTEGER DEFAULT 0, recorded_at TIMESTAMP DEFAULT NOW())"
+        )
+
     with engine.connect() as conn:
         stmts = [
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMP",
             "CREATE TABLE IF NOT EXISTS invite_codes (id SERIAL PRIMARY KEY, code VARCHAR UNIQUE NOT NULL, used BOOLEAN DEFAULT FALSE, used_by INTEGER REFERENCES users(id), created_by INTEGER NOT NULL REFERENCES users(id), created_at TIMESTAMP DEFAULT NOW())",
+            "ALTER TABLE competitors ADD COLUMN IF NOT EXISTS profile_picture_url VARCHAR",
+            "ALTER TABLE competitors ADD COLUMN IF NOT EXISTS bio TEXT",
+            "ALTER TABLE competitors ADD COLUMN IF NOT EXISTS last_fetched_at TIMESTAMP",
+            "ALTER TABLE competitors ADD COLUMN IF NOT EXISTS followers_count_updated_at TIMESTAMP",
+            engagement_history_ddl,
         ]
         for stmt in stmts:
             try:

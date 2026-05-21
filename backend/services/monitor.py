@@ -2,16 +2,16 @@ import asyncio
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from database import SessionLocal
-from models import Competitor, CompetitorPost, UserSettings
+from models import Competitor, CompetitorPost, CompetitorEngagementHistory, UserSettings, User
 from services.threads_client import ThreadsClient
 from services.discord_service import send_buzz_notification
 from core.config import settings
+
 
 async def check_competitor_posts():
     db: Session = SessionLocal()
     try:
         competitors = db.query(Competitor).filter(Competitor.is_active == True).all()
-        client = ThreadsClient()
 
         for competitor in competitors:
             try:
@@ -20,6 +20,11 @@ async def check_competitor_posts():
                 buzz_multiplier = user_settings.buzz_multiplier if user_settings else settings.buzz_multiplier
                 discord_webhook_url = (user_settings.discord_webhook_url if user_settings and user_settings.discord_webhook_url else "") or ""
                 notifications_enabled = user_settings.notifications_enabled if user_settings else True
+
+                # Use the competitor owner's Threads token, fall back to global token
+                user = db.query(User).filter(User.id == competitor.user_id).first()
+                token = (user.threads_access_token if user and user.threads_access_token else None) or settings.threads_access_token
+                client = ThreadsClient(access_token=token)
 
                 data = await client.get_user_threads(competitor.threads_user_id, limit=10)
                 posts = data.get("data", [])
@@ -91,9 +96,36 @@ async def check_competitor_posts():
                             avg_likes=avg_likes,
                             webhook_url=discord_webhook_url,
                         )
+
+                await client.close()
             except Exception as e:
                 print(f"Error monitoring {competitor.username}: {e}")
 
-        await client.close()
+    finally:
+        db.close()
+
+
+async def record_daily_engagement():
+    """Record daily engagement snapshots for all active competitors."""
+    db: Session = SessionLocal()
+    try:
+        competitors = db.query(Competitor).filter(Competitor.is_active == True).all()
+        for competitor in competitors:
+            try:
+                posts_count = db.query(CompetitorPost).filter(
+                    CompetitorPost.competitor_id == competitor.id
+                ).count()
+                history = CompetitorEngagementHistory(
+                    competitor_id=competitor.id,
+                    avg_likes=competitor.avg_likes_7d,
+                    posts_count=posts_count,
+                    followers_count=competitor.followers_count,
+                    recorded_at=datetime.utcnow(),
+                )
+                db.add(history)
+                db.commit()
+                print(f"[DailyEngagement] Recorded for {competitor.username}")
+            except Exception as e:
+                print(f"[DailyEngagement] Error for {competitor.username}: {e}")
     finally:
         db.close()

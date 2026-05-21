@@ -7,7 +7,7 @@ from database import SessionLocal
 from models import Post, User
 from services.threads_client import ThreadsClient
 from services.discord_service import send_post_published_notification
-from services.monitor import check_competitor_posts
+from services.monitor import check_competitor_posts, record_daily_engagement
 
 scheduler = AsyncIOScheduler(timezone="Asia/Tokyo")
 
@@ -52,6 +52,13 @@ def start_scheduler():
         check_competitor_posts,
         trigger=CronTrigger(minute="*/30"),
         id="competitor_monitor",
+        replace_existing=True,
+    )
+    # Record daily engagement snapshots at midnight
+    scheduler.add_job(
+        record_daily_engagement,
+        trigger=CronTrigger(hour=0, minute=0),
+        id="daily_engagement_record",
         replace_existing=True,
     )
     scheduler.start()
