@@ -7,7 +7,7 @@ import AuthGuard from './AuthGuard'
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
-  const isLoginPage = pathname === '/login'
+  const isLoginPage = pathname === '/login' || pathname === '/terms' || pathname === '/privacy'
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   return (

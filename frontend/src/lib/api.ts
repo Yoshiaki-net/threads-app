@@ -63,11 +63,12 @@ export const analyticsApi = {
 }
 
 export const authApi = {
-  register: (email: string, password: string, name: string) =>
-    api.post('/auth/register', { email, password, name }).then(r => r.data),
+  register: (email: string, password: string, name: string, invite_code = '') =>
+    api.post('/auth/register', { email, password, name, invite_code }).then(r => r.data),
   login: (email: string, password: string) =>
     api.post('/auth/login', { email, password }).then(r => r.data),
   me: () => api.get('/auth/me').then(r => r.data),
+  inviteOnlyStatus: () => api.get('/auth/invite-only').then(r => r.data),
 }
 
 export const adminApi = {
@@ -75,7 +76,11 @@ export const adminApi = {
   getStats: () => api.get('/admin/stats').then(r => r.data),
   toggleAdmin: (id: number) => api.patch(`/admin/users/${id}/toggle-admin`).then(r => r.data),
   toggleActive: (id: number) => api.patch(`/admin/users/${id}/toggle-active`).then(r => r.data),
+  resetPassword: (id: number, password: string) => api.patch(`/admin/users/${id}/reset-password`, { password }).then(r => r.data),
   deleteUser: (id: number) => api.delete(`/admin/users/${id}`).then(r => r.data),
+  listInvites: () => api.get('/admin/invites').then(r => r.data),
+  createInvite: () => api.post('/admin/invites').then(r => r.data),
+  deleteInvite: (id: number) => api.delete(`/admin/invites/${id}`).then(r => r.data),
 }
 
 export const userSettingsApi = {

@@ -2,9 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from database import get_db
-from models import User, Post, KnowledgeBase, Competitor
-from auth import get_current_user
+from models import User, Post, KnowledgeBase, Competitor, InviteCode
+from auth import get_current_user, hash_password
 from datetime import datetime
+import secrets
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -74,6 +75,18 @@ async def toggle_active(user_id: int, db: Session = Depends(get_db), admin: User
     db.commit()
     return {"id": user.id, "is_active": user.is_active}
 
+@router.patch("/users/{user_id}/reset-password")
+async def reset_password(user_id: int, body: dict, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="ユーザーが見つかりません")
+    new_password = body.get("password", "")
+    if len(new_password) < 6:
+        raise HTTPException(status_code=400, detail="パスワードは6文字以上にしてください")
+    user.hashed_password = hash_password(new_password)
+    db.commit()
+    return {"message": "パスワードをリセットしました"}
+
 @router.delete("/users/{user_id}")
 async def delete_user(user_id: int, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
     user = db.query(User).filter(User.id == user_id).first()
@@ -82,5 +95,31 @@ async def delete_user(user_id: int, db: Session = Depends(get_db), admin: User =
     if user.id == admin.id:
         raise HTTPException(status_code=400, detail="自分のアカウントは削除できません")
     db.delete(user)
+    db.commit()
+    return {"message": "削除しました"}
+
+# Invite codes
+@router.post("/invites")
+async def create_invite(db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    code = secrets.token_urlsafe(16)
+    invite = InviteCode(code=code, created_by=admin.id)
+    db.add(invite)
+    db.commit()
+    db.refresh(invite)
+    return {"code": invite.code, "id": invite.id, "used": invite.used}
+
+@router.get("/invites")
+async def list_invites(db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    invites = db.query(InviteCode).order_by(InviteCode.created_at.desc()).all()
+    return [{"id": i.id, "code": i.code, "used": i.used,
+             "used_by_email": db.query(User.email).filter(User.id == i.used_by).scalar() if i.used_by else None,
+             "created_at": i.created_at.isoformat()} for i in invites]
+
+@router.delete("/invites/{invite_id}")
+async def delete_invite(invite_id: int, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    invite = db.query(InviteCode).filter(InviteCode.id == invite_id).first()
+    if not invite:
+        raise HTTPException(status_code=404, detail="招待コードが見つかりません")
+    db.delete(invite)
     db.commit()
     return {"message": "削除しました"}

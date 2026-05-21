@@ -19,6 +19,7 @@ def run_migrations():
         stmts = [
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMP",
+            "CREATE TABLE IF NOT EXISTS invite_codes (id SERIAL PRIMARY KEY, code VARCHAR UNIQUE NOT NULL, used BOOLEAN DEFAULT FALSE, used_by INTEGER REFERENCES users(id), created_by INTEGER NOT NULL REFERENCES users(id), created_at TIMESTAMP DEFAULT NOW())",
         ]
         for stmt in stmts:
             try:

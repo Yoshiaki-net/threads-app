@@ -17,6 +17,15 @@ class User(Base):
     threads_user_id = Column(String, nullable=True)
     threads_username = Column(String, nullable=True)
 
+class InviteCode(Base):
+    __tablename__ = "invite_codes"
+    id = Column(Integer, primary_key=True, index=True)
+    code = Column(String, unique=True, index=True)
+    used = Column(Boolean, default=False)
+    used_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
 class Competitor(Base):
     __tablename__ = "competitors"
     id = Column(Integer, primary_key=True, index=True)

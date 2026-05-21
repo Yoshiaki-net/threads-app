@@ -8,7 +8,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false)
 
   useEffect(() => {
-    if (pathname === '/login') {
+    if (pathname === '/login' || pathname === '/terms' || pathname === '/privacy') {
       setReady(true)
       return
     }

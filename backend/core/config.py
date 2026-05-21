@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:3000"
     allowed_origins: str = "http://localhost:3000"
     admin_email: str = ""
+    invite_only: bool = False
 
     @property
     def cors_origins(self) -> List[str]:
