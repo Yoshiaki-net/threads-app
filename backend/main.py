@@ -12,6 +12,23 @@ from core.config import settings
 
 Base.metadata.create_all(bind=engine)
 
+def run_migrations():
+    """Add new columns to existing tables without dropping data."""
+    from sqlalchemy import text
+    with engine.connect() as conn:
+        stmts = [
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMP",
+        ]
+        for stmt in stmts:
+            try:
+                conn.execute(text(stmt))
+            except Exception as e:
+                print(f"[Migration] {e}")
+        conn.commit()
+
+run_migrations()
+
 def promote_admin():
     """Promote ADMIN_EMAIL to admin on startup if set."""
     if not settings.admin_email:
