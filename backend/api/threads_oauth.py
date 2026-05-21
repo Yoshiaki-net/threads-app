@@ -12,7 +12,7 @@ router = APIRouter(prefix="/api/auth/threads", tags=["threads-oauth"])
 THREADS_AUTH_URL = "https://threads.net/oauth/authorize"
 THREADS_TOKEN_URL = "https://graph.threads.net/oauth/access_token"
 THREADS_LONG_TOKEN_URL = "https://graph.threads.net/access_token"
-REDIRECT_URI = "http://localhost:8000/api/auth/threads/callback"
+REDIRECT_URI = f"{settings.backend_url}/api/auth/threads/callback"
 SCOPES = "threads_basic,threads_content_publish,threads_manage_insights,threads_read_replies,threads_manage_replies"
 
 @router.get("/authorize")

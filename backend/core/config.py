@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     buzz_multiplier: float = 3.0
     database_url: str = "sqlite:///./threads_app.db"
     frontend_url: str = "http://localhost:3000"
+    backend_url: str = "http://localhost:8000"
     allowed_origins: str = "http://localhost:3000"
     admin_email: str = ""
     invite_only: bool = False
