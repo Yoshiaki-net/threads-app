@@ -150,9 +150,9 @@ export default function SettingsPage() {
               </div>
               <button
                 onClick={() => setForm(f => ({ ...f, notifications_enabled: !f.notifications_enabled }))}
-                className={`relative inline-flex w-12 h-6 items-center rounded-full transition-colors duration-200 focus:outline-none flex-shrink-0 ${form.notifications_enabled ? 'bg-[#1E3464]' : 'bg-gray-200'}`}
+                className={`relative w-12 h-6 rounded-full transition-colors duration-200 focus:outline-none flex-shrink-0 ${form.notifications_enabled ? 'bg-[#1E3464]' : 'bg-gray-200'}`}
               >
-                <span className={`inline-block w-5 h-5 bg-white rounded-full shadow-md transform transition-transform duration-200 ${form.notifications_enabled ? 'translate-x-6' : 'translate-x-0.5'}`} />
+                <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-md transition-transform duration-200 ${form.notifications_enabled ? 'translate-x-6' : 'translate-x-0'}`} />
               </button>
             </div>
 
