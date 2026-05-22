@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { authApi, userSettingsApi } from '@/lib/api'
-import { getUser, saveUser } from '@/lib/auth'
+import { getUser, setUser as saveUser } from '@/lib/auth'
 import { User, Lock, Bell, Mail, BarChart2, Check, Loader2 } from 'lucide-react'
 import { toast } from '@/components/Toast'
 

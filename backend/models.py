@@ -42,6 +42,7 @@ class Competitor(Base):
     bio = Column(Text, nullable=True)
     last_fetched_at = Column(DateTime, nullable=True)
     followers_count_updated_at = Column(DateTime, nullable=True)
+    genre = Column(String, nullable=True, default="")
     posts = relationship("CompetitorPost", back_populates="competitor")
     engagement_history = relationship(
         "CompetitorEngagementHistory",

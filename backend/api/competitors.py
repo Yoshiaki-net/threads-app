@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, timedelta
 from database import get_db
 from models import Competitor, CompetitorPost, CompetitorEngagementHistory, User
 from services.threads_client import ThreadsClient
@@ -14,6 +14,11 @@ router = APIRouter(prefix="/api/competitors", tags=["competitors"])
 class CompetitorCreate(BaseModel):
     username: str
     threads_user_id: str = ""
+    genre: str = ""
+
+
+class GenreUpdate(BaseModel):
+    genre: str
 
 
 class CompetitorResponse(BaseModel):
@@ -28,6 +33,7 @@ class CompetitorResponse(BaseModel):
     bio: Optional[str] = None
     last_fetched_at: Optional[datetime] = None
     followers_count_updated_at: Optional[datetime] = None
+    genre: Optional[str] = ""
 
     class Config:
         from_attributes = True
@@ -120,6 +126,7 @@ async def add_competitor(
         display_name=data.username,
         followers_count=0,
         user_id=current_user.id,
+        genre=data.genre or "",
     )
     db.add(competitor)
     db.commit()
@@ -251,6 +258,97 @@ async def update_followers(
     db.commit()
     db.refresh(competitor)
     return competitor
+
+
+@router.patch("/{competitor_id}/genre", response_model=CompetitorResponse)
+async def update_genre(
+    competitor_id: int,
+    data: GenreUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    competitor = db.query(Competitor).filter(
+        Competitor.id == competitor_id, Competitor.user_id == current_user.id
+    ).first()
+    if not competitor:
+        raise HTTPException(status_code=404, detail="Not found")
+    competitor.genre = data.genre
+    db.commit()
+    db.refresh(competitor)
+    return competitor
+
+
+@router.get("/trending")
+async def get_trending(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Return accounts with the highest engagement lift yesterday vs the day before, grouped by genre."""
+    competitors = db.query(Competitor).filter(
+        Competitor.user_id == current_user.id, Competitor.is_active == True
+    ).all()
+
+    now = datetime.utcnow()
+    yesterday_start = (now - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    yesterday_end = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    day_before_start = (now - timedelta(days=2)).replace(hour=0, minute=0, second=0, microsecond=0)
+
+    results = []
+    for c in competitors:
+        # Get yesterday's snapshot (most recent in yesterday window)
+        yesterday_snap = (
+            db.query(CompetitorEngagementHistory)
+            .filter(
+                CompetitorEngagementHistory.competitor_id == c.id,
+                CompetitorEngagementHistory.recorded_at >= yesterday_start,
+                CompetitorEngagementHistory.recorded_at < yesterday_end,
+            )
+            .order_by(CompetitorEngagementHistory.recorded_at.desc())
+            .first()
+        )
+        # Get day-before snapshot
+        day_before_snap = (
+            db.query(CompetitorEngagementHistory)
+            .filter(
+                CompetitorEngagementHistory.competitor_id == c.id,
+                CompetitorEngagementHistory.recorded_at >= day_before_start,
+                CompetitorEngagementHistory.recorded_at < yesterday_start,
+            )
+            .order_by(CompetitorEngagementHistory.recorded_at.desc())
+            .first()
+        )
+
+        current_avg = yesterday_snap.avg_likes if yesterday_snap else c.avg_likes_7d
+        prev_avg = day_before_snap.avg_likes if day_before_snap else None
+
+        if prev_avg and prev_avg > 0:
+            lift_pct = ((current_avg - prev_avg) / prev_avg) * 100
+        else:
+            lift_pct = 0.0
+
+        results.append({
+            "id": c.id,
+            "username": c.username,
+            "display_name": c.display_name,
+            "profile_picture_url": c.profile_picture_url,
+            "followers_count": c.followers_count,
+            "avg_likes_7d": c.avg_likes_7d,
+            "current_avg": current_avg,
+            "prev_avg": prev_avg,
+            "lift_pct": round(lift_pct, 1),
+            "genre": c.genre or "その他",
+        })
+
+    # Sort by lift descending
+    results.sort(key=lambda x: x["lift_pct"], reverse=True)
+
+    # Group by genre, keep top 5 per genre
+    grouped: dict = {}
+    for r in results:
+        genre = r["genre"] or "その他"
+        if genre not in grouped:
+            grouped[genre] = []
+        if len(grouped[genre]) < 5:
+            grouped[genre].append(r)
+
+    return {"trending": results[:10], "by_genre": grouped}
 
 
 @router.delete("/{competitor_id}")

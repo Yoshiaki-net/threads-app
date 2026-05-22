@@ -197,7 +197,7 @@ export default function PostsPage() {
   }
 
   const adoptVariant = (post: any) => {
-    setAdoptedIds(prev => new Set([...prev, post.id]))
+    setAdoptedIds(prev => new Set([...Array.from(prev), post.id]))
     toast.success('採用しました！投稿ライブラリに追加されました')
     load()
   }

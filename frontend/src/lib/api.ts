@@ -22,7 +22,7 @@ api.interceptors.response.use(
 
 export const competitorApi = {
   list: () => api.get('/competitors/').then(r => r.data),
-  add: (username: string, threads_user_id = '') => api.post('/competitors/', { username, threads_user_id }).then(r => r.data),
+  add: (username: string, threads_user_id = '', genre = '') => api.post('/competitors/', { username, threads_user_id, genre }).then(r => r.data),
   remove: (id: number) => api.delete(`/competitors/${id}`).then(r => r.data),
   getPosts: (id: number, buzzOnly = false) =>
     api.get(`/competitors/${id}/posts`, { params: { buzz_only: buzzOnly } }).then(r => r.data),
@@ -31,6 +31,8 @@ export const competitorApi = {
   refresh: (id: number) => api.post(`/competitors/${id}/refresh`).then(r => r.data),
   getHistory: (id: number) => api.get(`/competitors/${id}/history`).then(r => r.data),
   updateFollowers: (id: number, followers_count: number) => api.patch(`/competitors/${id}/followers`, { followers_count }).then(r => r.data),
+  updateGenre: (id: number, genre: string) => api.patch(`/competitors/${id}/genre`, { genre }).then(r => r.data),
+  getTrending: () => api.get('/competitors/trending').then(r => r.data),
 }
 
 export const knowledgeApi = {

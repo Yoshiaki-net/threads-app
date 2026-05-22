@@ -44,6 +44,7 @@ def run_migrations():
             "ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS email_notifications_enabled BOOLEAN DEFAULT FALSE",
             "ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS notification_email VARCHAR",
             "ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS weekly_report_enabled BOOLEAN DEFAULT FALSE",
+            "ALTER TABLE competitors ADD COLUMN IF NOT EXISTS genre VARCHAR DEFAULT ''",
         ]
         for stmt in stmts:
             try:

@@ -4,9 +4,22 @@ import { competitorApi, postApi } from '@/lib/api'
 import {
   Plus, Trash2, Flame, RefreshCw, Users, Search,
   TrendingUp, TrendingDown, Minus, Edit2, Check, X,
-  Heart, MessageCircle, Repeat2, ChevronRight
+  Heart, MessageCircle, Repeat2, Tag, Zap, ChevronDown,
+  BarChart2, Award
 } from 'lucide-react'
 import { toast } from '@/components/Toast'
+
+const GENRES = ['ビジネス', 'マーケティング', '副業・起業', 'ライフスタイル', 'テック', '教育', '健康・美容', 'その他']
+const GENRE_COLORS: Record<string, string> = {
+  'ビジネス':     'bg-blue-100 text-blue-700',
+  'マーケティング': 'bg-purple-100 text-purple-700',
+  '副業・起業':   'bg-amber-100 text-amber-700',
+  'ライフスタイル': 'bg-green-100 text-green-700',
+  'テック':       'bg-cyan-100 text-cyan-700',
+  '教育':         'bg-indigo-100 text-indigo-700',
+  '健康・美容':   'bg-rose-100 text-rose-700',
+  'その他':       'bg-gray-100 text-gray-600',
+}
 
 type Competitor = {
   id: number
@@ -20,6 +33,7 @@ type Competitor = {
   bio: string | null
   last_fetched_at: string | null
   followers_count_updated_at: string | null
+  genre: string | null
 }
 
 type Post = {
@@ -47,6 +61,19 @@ type Preview = {
   bio: string | null
 }
 
+type TrendingAccount = {
+  id: number
+  username: string
+  display_name: string | null
+  profile_picture_url: string | null
+  followers_count: number
+  avg_likes_7d: number
+  current_avg: number
+  prev_avg: number | null
+  lift_pct: number
+  genre: string
+}
+
 function Avatar({ src, name, size = 40 }: { src?: string | null; name: string; size?: number }) {
   const [err, setErr] = useState(false)
   if (src && !err) {
@@ -60,60 +87,171 @@ function Avatar({ src, name, size = 40 }: { src?: string | null; name: string; s
       />
     )
   }
+  const colors = [
+    'from-blue-500 to-purple-500',
+    'from-emerald-500 to-teal-500',
+    'from-orange-500 to-red-500',
+    'from-[#1E3464] to-[#C9A84C]',
+  ]
+  const color = colors[(name?.charCodeAt(0) || 0) % colors.length]
   return (
     <div
-      className="rounded-full bg-gradient-to-br from-[#1E3464] to-[#C9A84C] flex items-center justify-center text-white font-bold flex-shrink-0"
-      style={{ width: size, height: size, fontSize: size * 0.35 }}
+      className={`rounded-full bg-gradient-to-br ${color} flex items-center justify-center text-white font-bold flex-shrink-0`}
+      style={{ width: size, height: size, fontSize: size * 0.38 }}
     >
       {name?.charAt(0).toUpperCase() || '?'}
     </div>
   )
 }
 
-function TrendBadge({ current, previous }: { current: number; previous: number | null }) {
-  if (previous === null || previous === 0) return null
-  const diff = current - previous
-  const pct = Math.abs(Math.round((diff / previous) * 100))
-  if (pct < 1) return <span className="text-xs text-gray-400 flex items-center gap-0.5"><Minus size={10} />±0%</span>
-  if (diff > 0) return (
-    <span className="text-xs text-emerald-500 flex items-center gap-0.5 font-medium">
+function GenreBadge({ genre }: { genre: string | null }) {
+  const g = genre || 'その他'
+  return (
+    <span className={`inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${GENRE_COLORS[g] || 'bg-gray-100 text-gray-600'}`}>
+      {g}
+    </span>
+  )
+}
+
+function LiftBadge({ pct }: { pct: number }) {
+  if (Math.abs(pct) < 1) return <span className="inline-flex items-center gap-0.5 text-xs text-gray-400"><Minus size={10} />±0%</span>
+  if (pct > 0) return (
+    <span className="inline-flex items-center gap-0.5 text-xs text-emerald-600 font-semibold bg-emerald-50 px-1.5 py-0.5 rounded-full">
       <TrendingUp size={10} />+{pct}%
     </span>
   )
   return (
-    <span className="text-xs text-red-400 flex items-center gap-0.5 font-medium">
-      <TrendingDown size={10} />-{pct}%
+    <span className="inline-flex items-center gap-0.5 text-xs text-red-500 font-semibold bg-red-50 px-1.5 py-0.5 rounded-full">
+      <TrendingDown size={10} />{pct}%
     </span>
   )
 }
 
 function MiniChart({ history }: { history: HistoryEntry[] }) {
   if (history.length < 2) return (
-    <div className="text-xs text-gray-400 text-center py-2">データ蓄積中...</div>
+    <div className="flex items-end gap-1 h-10">
+      {[0.3, 0.5, 0.4, 0.6, 0.45, 0.7, 0.55].map((h, i) => (
+        <div key={i} className="flex-1 bg-gray-100 rounded-t" style={{ height: `${h * 100}%` }} />
+      ))}
+    </div>
   )
-  const sorted = [...history].sort((a, b) => new Date(a.recorded_at).getTime() - new Date(b.recorded_at).getTime()).slice(-7)
+  const sorted = [...history]
+    .sort((a, b) => new Date(a.recorded_at).getTime() - new Date(b.recorded_at).getTime())
+    .slice(-7)
   const max = Math.max(...sorted.map(h => h.avg_likes), 1)
   return (
-    <div className="flex items-end gap-1 h-12">
+    <div className="flex items-end gap-1 h-10">
       {sorted.map((h, i) => {
-        const heightPct = Math.max((h.avg_likes / max) * 100, 4)
         const isLast = i === sorted.length - 1
         return (
-          <div key={i} className="flex-1 flex flex-col items-center gap-0.5 group relative">
-            <div
-              className={`w-full rounded-t transition-all ${isLast ? 'bg-[#C9A84C]' : 'bg-[#1E3464]/20'}`}
-              style={{ height: `${heightPct}%` }}
-            />
-            <div className="absolute -top-7 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-[10px] px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">
-              {Math.round(h.avg_likes)}
-            </div>
-          </div>
+          <div
+            key={i}
+            className={`flex-1 rounded-t transition-all ${isLast ? 'bg-[#C9A84C]' : 'bg-[#1E3464]/20'}`}
+            style={{ height: `${Math.max((h.avg_likes / max) * 100, 6)}%` }}
+            title={`${Math.round(h.avg_likes)}`}
+          />
         )
       })}
     </div>
   )
 }
 
+// ── Trending Section ──────────────────────────────────────────────
+function TrendingSection({ onSelectId }: { onSelectId: (id: number) => void }) {
+  const [data, setData] = useState<{ trending: TrendingAccount[]; by_genre: Record<string, TrendingAccount[]> } | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [activeGenre, setActiveGenre] = useState<string | null>(null)
+
+  useEffect(() => {
+    competitorApi.getTrending()
+      .then(setData)
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  if (loading) return (
+    <div className="bg-white rounded-2xl border border-gray-100 p-4 mb-5 animate-pulse">
+      <div className="h-4 w-48 bg-gray-100 rounded mb-3" />
+      <div className="flex gap-3">
+        {[1,2,3].map(i => <div key={i} className="flex-1 h-20 bg-gray-100 rounded-xl" />)}
+      </div>
+    </div>
+  )
+
+  if (!data || data.trending.length === 0) return null
+
+  const genres = Object.keys(data.by_genre)
+  const displayGenre = activeGenre || genres[0]
+  const displayList = displayGenre ? (data.by_genre[displayGenre] || []) : data.trending.slice(0, 5)
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-5">
+      <div className="flex items-center gap-2 mb-4">
+        <div className="w-6 h-6 bg-amber-100 rounded-full flex items-center justify-center">
+          <Zap size={13} className="text-amber-600" />
+        </div>
+        <h3 className="font-bold text-gray-900 text-sm">昨日のジャンル別急上昇アカウント</h3>
+        <span className="ml-auto text-[10px] text-gray-400 flex items-center gap-1">
+          <BarChart2 size={10} />前日比エンゲージメント
+        </span>
+      </div>
+
+      {/* Genre tabs */}
+      {genres.length > 1 && (
+        <div className="flex gap-1.5 mb-4 overflow-x-auto pb-1 scrollbar-hide">
+          {genres.map(g => (
+            <button
+              key={g}
+              onClick={() => setActiveGenre(g === displayGenre && activeGenre ? null : g)}
+              className={`flex-shrink-0 text-xs px-3 py-1 rounded-full font-medium transition-colors ${
+                g === displayGenre
+                  ? 'bg-[#1E3464] text-white'
+                  : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+              }`}
+            >
+              {g}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Account cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+        {displayList.map((acc, idx) => (
+          <button
+            key={acc.id}
+            onClick={() => onSelectId(acc.id)}
+            className="text-left p-3 rounded-xl border border-gray-100 hover:border-[#C9A84C]/50 hover:bg-[#FDF8EE] transition-all group"
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <div className="relative">
+                <Avatar src={acc.profile_picture_url} name={acc.username} size={36} />
+                {idx === 0 && displayGenre === (activeGenre || genres[0]) && (
+                  <div className="absolute -top-1 -right-1 w-4 h-4 bg-amber-400 rounded-full flex items-center justify-center">
+                    <Award size={9} className="text-white" />
+                  </div>
+                )}
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-gray-900 truncate">@{acc.username}</p>
+                <GenreBadge genre={acc.genre} />
+              </div>
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1 text-xs text-gray-500">
+                <Heart size={10} className="text-rose-400" />
+                {Math.round(acc.current_avg).toLocaleString()}
+              </div>
+              <LiftBadge pct={acc.lift_pct} />
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Main page ─────────────────────────────────────────────────────
 export default function CompetitorsPage() {
   const [competitors, setCompetitors] = useState<Competitor[]>([])
   const [selected, setSelected] = useState<Competitor | null>(null)
@@ -121,20 +259,25 @@ export default function CompetitorsPage() {
   const [history, setHistory] = useState<HistoryEntry[]>([])
   const [buzzOnly, setBuzzOnly] = useState(false)
   const [analysis, setAnalysis] = useState<Record<number, string>>({})
-  const [loading, setLoading] = useState(false)
+  const [loadingPosts, setLoadingPosts] = useState(false)
   const [removing, setRemoving] = useState<number | null>(null)
   const [refreshing, setRefreshing] = useState<number | null>(null)
 
   // Add form
   const [username, setUsername] = useState('')
   const [threadsUserId, setThreadsUserId] = useState('')
+  const [genre, setGenre] = useState('')
   const [preview, setPreview] = useState<Preview | null>(null)
   const [previewing, setPreviewing] = useState(false)
   const [showAddForm, setShowAddForm] = useState(false)
+  const [adding, setAdding] = useState(false)
 
   // Followers inline edit
   const [editingFollowers, setEditingFollowers] = useState<number | null>(null)
   const [followerInput, setFollowerInput] = useState('')
+
+  // Genre inline edit
+  const [editingGenre, setEditingGenre] = useState<number | null>(null)
 
   const load = useCallback(() => competitorApi.list().then(setCompetitors), [])
   useEffect(() => { load() }, [load])
@@ -160,21 +303,23 @@ export default function CompetitorsPage() {
 
   const add = async () => {
     if (!username.trim()) { toast.error('ユーザー名を入力してください'); return }
-    setLoading(true)
+    setAdding(true)
     try {
       await competitorApi.add(
         username.trim().replace(/^@/, ''),
-        preview?.threads_user_id || threadsUserId.trim()
+        preview?.threads_user_id || threadsUserId.trim(),
+        genre
       )
       toast.success(`@${username.trim()} を追加しました`)
-      setUsername(''); setThreadsUserId(''); setPreview(null); setShowAddForm(false)
+      setUsername(''); setThreadsUserId(''); setPreview(null); setGenre(''); setShowAddForm(false)
       load()
     } catch (e: any) {
       toast.error(e.response?.data?.detail || '追加に失敗しました')
-    } finally { setLoading(false) }
+    } finally { setAdding(false) }
   }
 
   const remove = async (id: number) => {
+    if (!confirm('このアカウントを削除しますか？')) return
     setRemoving(id)
     try {
       await competitorApi.remove(id)
@@ -199,12 +344,23 @@ export default function CompetitorsPage() {
 
   const selectCompetitor = async (c: Competitor) => {
     setSelected(c)
-    const [postsData, historyData] = await Promise.all([
-      competitorApi.getPosts(c.id, buzzOnly),
-      competitorApi.getHistory(c.id),
-    ])
-    setPosts(postsData)
-    setHistory(historyData)
+    setBuzzOnly(false)
+    setLoadingPosts(true)
+    try {
+      const [postsData, historyData] = await Promise.all([
+        competitorApi.getPosts(c.id, false),
+        competitorApi.getHistory(c.id),
+      ])
+      setPosts(postsData)
+      setHistory(historyData)
+    } finally {
+      setLoadingPosts(false)
+    }
+  }
+
+  const selectById = (id: number) => {
+    const c = competitors.find(x => x.id === id)
+    if (c) selectCompetitor(c)
   }
 
   const saveFollowers = async (id: number) => {
@@ -219,6 +375,16 @@ export default function CompetitorsPage() {
     } catch { toast.error('更新に失敗しました') }
   }
 
+  const saveGenre = async (id: number, newGenre: string) => {
+    try {
+      const updated = await competitorApi.updateGenre(id, newGenre)
+      setCompetitors(prev => prev.map(x => x.id === id ? updated : x))
+      if (selected?.id === id) setSelected(updated)
+      setEditingGenre(null)
+      toast.success('ジャンルを更新しました')
+    } catch { toast.error('更新に失敗しました') }
+  }
+
   const analyze = async (post: Post) => {
     try {
       const { analysis: a } = await postApi.analyzeCompetitor(post.text)
@@ -227,28 +393,33 @@ export default function CompetitorsPage() {
   }
 
   const maxLikes = Math.max(...posts.map(p => p.likes_count), 1)
-  const prevAvgLikes = history.length >= 2 ? history[1]?.avg_likes : null
+  const sortedHistory = [...history].sort(
+    (a, b) => new Date(a.recorded_at).getTime() - new Date(b.recorded_at).getTime()
+  )
+  const prevAvgLikes = sortedHistory.length >= 2 ? sortedHistory[sortedHistory.length - 2]?.avg_likes : null
 
   return (
     <div className="max-w-7xl mx-auto">
       {/* Header */}
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-5 flex items-center justify-between">
         <div>
           <h2 className="text-xl md:text-2xl font-bold text-gray-900">競合リサーチ</h2>
           <p className="text-sm text-gray-500 mt-0.5">競合アカウントの投稿・エンゲージメントを追跡します</p>
         </div>
         <button
           onClick={() => setShowAddForm(v => !v)}
-          className="flex items-center gap-2 px-4 py-2 bg-[#1E3464] text-white rounded-full text-sm font-medium hover:bg-[#162A52] transition-colors"
+          className="flex items-center gap-2 px-4 py-2 bg-[#1E3464] text-white rounded-full text-sm font-medium hover:bg-[#162A52] transition-colors shadow-sm"
         >
-          <Plus size={15} />追加
+          <Plus size={15} /> アカウントを追加
         </button>
       </div>
 
       {/* Add form */}
       {showAddForm && (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-6">
-          <h3 className="text-sm font-semibold text-gray-700 mb-4">競合アカウントを追加</h3>
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-5">
+          <h3 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
+            <Plus size={14} className="text-[#C9A84C]" /> 競合アカウントを追加
+          </h3>
           <div className="space-y-3">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
@@ -270,6 +441,24 @@ export default function CompetitorsPage() {
                 />
               </div>
             </div>
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block flex items-center gap-1"><Tag size={10} /> ジャンル</label>
+              <div className="flex flex-wrap gap-1.5">
+                {GENRES.map(g => (
+                  <button
+                    key={g}
+                    onClick={() => setGenre(genre === g ? '' : g)}
+                    className={`text-xs px-3 py-1 rounded-full border transition-colors ${
+                      genre === g
+                        ? 'bg-[#1E3464] text-white border-[#1E3464]'
+                        : 'border-gray-200 text-gray-500 hover:border-[#1E3464] hover:text-[#1E3464]'
+                    }`}
+                  >
+                    {g}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="flex gap-2">
               <button
                 onClick={lookupPreview}
@@ -277,39 +466,50 @@ export default function CompetitorsPage() {
                 className="flex items-center gap-2 px-4 py-2 border border-[#1E3464] text-[#1E3464] rounded-full text-sm font-medium hover:bg-[#EEF1F8] disabled:opacity-50 transition-colors"
               >
                 {previewing ? <RefreshCw size={13} className="animate-spin" /> : <Search size={13} />}
-                プレビュー
+                プレビュー確認
               </button>
               <button
                 onClick={add}
-                disabled={loading || !username.trim()}
+                disabled={adding || !username.trim()}
                 className="flex items-center gap-2 px-4 py-2 bg-[#C9A84C] text-white rounded-full text-sm font-medium hover:bg-[#b8963e] disabled:opacity-50 transition-colors"
               >
-                {loading ? <RefreshCw size={13} className="animate-spin" /> : <Plus size={13} />}
+                {adding ? <RefreshCw size={13} className="animate-spin" /> : <Plus size={13} />}
                 追加する
               </button>
             </div>
 
-            {/* Preview card */}
             {preview && (
               <div className="flex items-center gap-3 p-3 bg-[#FDF8EE] border border-[#C9A84C]/30 rounded-xl">
                 <Avatar src={preview.profile_picture_url} name={preview.username} size={44} />
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <p className="font-semibold text-sm text-gray-900">@{preview.username}</p>
                   {preview.display_name && preview.display_name !== preview.username && (
                     <p className="text-xs text-gray-500">{preview.display_name}</p>
                   )}
                   {preview.bio && <p className="text-xs text-gray-400 mt-0.5 truncate">{preview.bio}</p>}
                 </div>
-                <span className="ml-auto text-xs text-[#C9A84C] font-medium bg-white px-2 py-0.5 rounded-full border border-[#C9A84C]/30 flex-shrink-0">取得済み</span>
+                <span className="text-xs text-[#C9A84C] font-medium bg-white px-2 py-0.5 rounded-full border border-[#C9A84C]/30 flex-shrink-0">
+                  ✓ 取得済み
+                </span>
               </div>
             )}
           </div>
         </div>
       )}
 
+      {/* Trending section */}
+      <TrendingSection onSelectId={selectById} />
+
+      {/* Main grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
         {/* Left: Competitor list */}
         <div className="space-y-2">
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+              追跡中 ({competitors.length}/10)
+            </p>
+          </div>
+
           {competitors.length === 0 && (
             <div className="bg-white rounded-2xl border border-dashed border-gray-200 p-8 text-center">
               <div className="w-12 h-12 bg-[#EEF1F8] rounded-full flex items-center justify-center mx-auto mb-3">
@@ -325,26 +525,33 @@ export default function CompetitorsPage() {
           {competitors.map(c => {
             const isSelected = selected?.id === c.id
             const isRefreshing = refreshing === c.id
+
             return (
               <div
                 key={c.id}
                 onClick={() => selectCompetitor(c)}
-                className={`p-4 rounded-2xl border cursor-pointer transition-all ${
+                className={`p-3.5 rounded-2xl border cursor-pointer transition-all ${
                   isSelected
                     ? 'border-[#C9A84C] bg-[#FDF8EE] shadow-sm'
-                    : 'border-gray-100 bg-white hover:border-[#C9A84C]/50 hover:shadow-sm'
+                    : 'border-gray-100 bg-white hover:border-[#C9A84C]/40 hover:shadow-sm'
                 }`}
               >
                 <div className="flex items-start gap-3">
-                  <Avatar src={c.profile_picture_url} name={c.username} size={40} />
+                  <Avatar src={c.profile_picture_url} name={c.username} size={42} />
                   <div className="flex-1 min-w-0">
+                    {/* Username + actions */}
                     <div className="flex items-center justify-between gap-1">
-                      <p className="font-semibold text-sm text-gray-900 truncate">@{c.username}</p>
-                      <div className="flex items-center gap-1 flex-shrink-0">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-sm text-gray-900 truncate">@{c.username}</p>
+                        {c.display_name && c.display_name !== c.username && (
+                          <p className="text-[11px] text-gray-400 truncate">{c.display_name}</p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-0.5 flex-shrink-0">
                         <button
                           onClick={e => { e.stopPropagation(); refresh(c) }}
                           disabled={isRefreshing}
-                          className="p-1 text-gray-300 hover:text-[#1E3464] transition-colors disabled:opacity-50"
+                          className="p-1 text-gray-300 hover:text-[#1E3464] transition-colors disabled:opacity-50 rounded-lg hover:bg-gray-100"
                           title="更新"
                         >
                           <RefreshCw size={12} className={isRefreshing ? 'animate-spin' : ''} />
@@ -352,18 +559,50 @@ export default function CompetitorsPage() {
                         <button
                           onClick={e => { e.stopPropagation(); remove(c.id) }}
                           disabled={removing === c.id}
-                          className="p-1 text-gray-300 hover:text-red-400 transition-colors"
+                          className="p-1 text-gray-300 hover:text-red-400 transition-colors rounded-lg hover:bg-red-50"
                         >
                           <Trash2 size={12} />
                         </button>
                       </div>
                     </div>
 
+                    {/* Genre badge */}
+                    <div className="mt-1.5 flex items-center gap-1.5 flex-wrap" onClick={e => e.stopPropagation()}>
+                      {editingGenre === c.id ? (
+                        <div className="flex flex-wrap gap-1">
+                          {GENRES.map(g => (
+                            <button
+                              key={g}
+                              onClick={() => saveGenre(c.id, g)}
+                              className={`text-[10px] px-2 py-0.5 rounded-full border transition-colors ${
+                                c.genre === g
+                                  ? 'bg-[#1E3464] text-white border-[#1E3464]'
+                                  : 'border-gray-200 text-gray-500 hover:border-[#1E3464]'
+                              }`}
+                            >
+                              {g}
+                            </button>
+                          ))}
+                          <button onClick={() => setEditingGenre(null)} className="text-gray-400 hover:text-gray-600">
+                            <X size={11} />
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setEditingGenre(c.id)}
+                          className="group flex items-center gap-1"
+                        >
+                          <GenreBadge genre={c.genre} />
+                          <Edit2 size={9} className="text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </button>
+                      )}
+                    </div>
+
                     {/* Followers */}
-                    <div className="mt-1 flex items-center gap-1.5">
-                      <Users size={10} className="text-gray-400" />
+                    <div className="mt-1 flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+                      <Users size={10} className="text-gray-300" />
                       {editingFollowers === c.id ? (
-                        <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center gap-1">
                           <input
                             autoFocus
                             className="w-20 text-xs border border-[#C9A84C] rounded px-1 py-0.5 focus:outline-none"
@@ -376,182 +615,207 @@ export default function CompetitorsPage() {
                         </div>
                       ) : (
                         <button
-                          onClick={e => { e.stopPropagation(); setEditingFollowers(c.id); setFollowerInput(String(c.followers_count)) }}
-                          className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1 group"
+                          onClick={() => { setEditingFollowers(c.id); setFollowerInput(String(c.followers_count)) }}
+                          className="text-xs text-gray-400 hover:text-gray-700 flex items-center gap-1 group"
                         >
-                          {c.followers_count > 0 ? c.followers_count.toLocaleString() : '未設定'}
+                          {c.followers_count > 0 ? c.followers_count.toLocaleString() + ' フォロワー' : 'フォロワー未設定'}
                           <Edit2 size={9} className="opacity-0 group-hover:opacity-100 transition-opacity" />
                         </button>
                       )}
                     </div>
 
-                    {/* Avg likes + trend */}
-                    <div className="mt-1 flex items-center gap-2">
-                      <span className="text-xs text-gray-500 flex items-center gap-1">
-                        <Heart size={10} className="text-rose-400" />
-                        平均 {Math.round(c.avg_likes_7d).toLocaleString()}
+                    {/* Avg likes */}
+                    <div className="mt-1 flex items-center gap-1">
+                      <Heart size={10} className="text-rose-400" />
+                      <span className="text-xs text-gray-500">
+                        平均 <strong className="text-gray-800">{Math.round(c.avg_likes_7d).toLocaleString()}</strong>
                       </span>
-                      {isSelected && <TrendBadge current={c.avg_likes_7d} previous={prevAvgLikes} />}
                     </div>
                   </div>
                 </div>
-
-                {isSelected && (
-                  <div className="mt-2">
-                    <ChevronRight size={12} className="text-[#C9A84C] ml-auto" />
-                  </div>
-                )}
               </div>
             )
           })}
         </div>
 
-        {/* Right: Posts panel */}
+        {/* Right: Detail panel */}
         <div className="col-span-2">
           {selected ? (
             <div className="space-y-4">
-              {/* Account header */}
-              <div className="bg-white rounded-2xl shadow-sm p-5">
+              {/* Account header card */}
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
                 <div className="flex items-start gap-4">
-                  <Avatar src={selected.profile_picture_url} name={selected.username} size={56} />
+                  <Avatar src={selected.profile_picture_url} name={selected.username} size={60} />
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-start justify-between gap-2">
                       <div>
-                        <h3 className="font-bold text-gray-900">@{selected.username}</h3>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h3 className="font-bold text-gray-900">@{selected.username}</h3>
+                          <GenreBadge genre={selected.genre} />
+                        </div>
                         {selected.display_name && selected.display_name !== selected.username && (
-                          <p className="text-sm text-gray-500">{selected.display_name}</p>
+                          <p className="text-sm text-gray-500 mt-0.5">{selected.display_name}</p>
                         )}
                       </div>
                       <button
                         onClick={() => refresh(selected)}
                         disabled={refreshing === selected.id}
-                        className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-gray-600 rounded-full text-xs hover:border-[#1E3464] hover:text-[#1E3464] transition-colors disabled:opacity-50"
+                        className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-gray-600 rounded-full text-xs hover:border-[#1E3464] hover:text-[#1E3464] transition-colors disabled:opacity-50 flex-shrink-0"
                       >
                         <RefreshCw size={11} className={refreshing === selected.id ? 'animate-spin' : ''} />
-                        更新
+                        最新データ取得
                       </button>
                     </div>
                     {selected.bio && (
-                      <p className="text-xs text-gray-500 mt-1.5 line-clamp-2">{selected.bio}</p>
+                      <p className="text-xs text-gray-500 mt-2 leading-relaxed line-clamp-2">{selected.bio}</p>
                     )}
-                    <div className="flex gap-4 mt-2">
-                      <div className="text-center">
+
+                    {/* Stats row */}
+                    <div className="flex gap-5 mt-3 pt-3 border-t border-gray-50">
+                      <div>
                         <p className="text-sm font-bold text-gray-900">
                           {selected.followers_count > 0 ? selected.followers_count.toLocaleString() : '—'}
                         </p>
                         <p className="text-[10px] text-gray-400">フォロワー</p>
                       </div>
-                      <div className="text-center">
+                      <div>
                         <p className="text-sm font-bold text-gray-900">{Math.round(selected.avg_likes_7d).toLocaleString()}</p>
                         <p className="text-[10px] text-gray-400">平均いいね</p>
                       </div>
-                      <div className="text-center">
+                      <div>
                         <p className="text-sm font-bold text-gray-900">{posts.length}</p>
                         <p className="text-[10px] text-gray-400">取得投稿数</p>
                       </div>
+                      {prevAvgLikes !== null && (
+                        <div>
+                          <LiftBadge pct={Math.round(((selected.avg_likes_7d - prevAvgLikes) / Math.max(prevAvgLikes, 1)) * 100)} />
+                          <p className="text-[10px] text-gray-400 mt-0.5">前回比</p>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
 
-                {/* Engagement trend chart */}
+                {/* Mini chart */}
                 {history.length > 0 && (
                   <div className="mt-4 pt-4 border-t border-gray-100">
                     <div className="flex items-center justify-between mb-2">
-                      <p className="text-xs font-semibold text-gray-600">平均いいね推移</p>
-                      <TrendBadge current={selected.avg_likes_7d} previous={prevAvgLikes} />
+                      <p className="text-xs font-semibold text-gray-600">平均いいね推移（直近7回）</p>
                     </div>
                     <MiniChart history={history} />
                   </div>
                 )}
               </div>
 
-              {/* Posts filter */}
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-gray-700">投稿一覧 <span className="text-gray-400 font-normal">({posts.length}件)</span></p>
-                <label className="flex items-center gap-2 text-sm cursor-pointer">
+              {/* Posts filter bar */}
+              <div className="flex items-center justify-between px-1">
+                <p className="text-sm font-semibold text-gray-700">
+                  投稿一覧 <span className="text-gray-400 font-normal text-xs">({posts.length}件)</span>
+                </p>
+                <label className="flex items-center gap-2 cursor-pointer bg-white border border-gray-200 rounded-full px-3 py-1.5 text-xs hover:border-[#C9A84C] transition-colors">
                   <input
                     type="checkbox"
                     checked={buzzOnly}
-                    onChange={e => { setBuzzOnly(e.target.checked); selectCompetitor(selected) }}
+                    onChange={async e => {
+                      setBuzzOnly(e.target.checked)
+                      if (selected) {
+                        setLoadingPosts(true)
+                        const postsData = await competitorApi.getPosts(selected.id, e.target.checked)
+                        setPosts(postsData)
+                        setLoadingPosts(false)
+                      }
+                    }}
                     className="accent-[#C9A84C]"
                   />
-                  <Flame size={13} className="text-[#C9A84C]" />
-                  <span className="text-gray-600 text-xs">バズのみ</span>
+                  <Flame size={12} className="text-[#C9A84C]" />
+                  <span className="text-gray-600">バズのみ表示</span>
                 </label>
               </div>
 
-              {/* Posts */}
-              <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1">
-                {posts.length === 0 && (
-                  <div className="bg-white rounded-2xl border border-dashed border-gray-200 p-8 text-center">
-                    <p className="text-sm text-gray-400">投稿がありません。「更新」ボタンで取得してください。</p>
-                  </div>
-                )}
-                {posts.map(p => (
-                  <div key={p.id} className={`bg-white rounded-2xl border p-4 transition-all ${p.is_buzz ? 'border-[#C9A84C]/40' : 'border-gray-100'}`}>
-                    {p.is_buzz && (
-                      <span className="inline-flex items-center gap-1 text-xs text-[#C9A84C] font-semibold bg-[#FDF8EE] px-2 py-0.5 rounded-full mb-2 border border-[#C9A84C]/20">
-                        <Flame size={10} /> バズ投稿
-                      </span>
-                    )}
-                    <p className="text-sm text-gray-800 leading-relaxed">{p.text || '（テキストなし）'}</p>
-
-                    {/* Like bar */}
-                    <div className="mt-3">
-                      <div className="h-1 bg-gray-100 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full rounded-full transition-all ${p.is_buzz ? 'bg-[#C9A84C]' : 'bg-[#1E3464]/30'}`}
-                          style={{ width: `${(p.likes_count / maxLikes) * 100}%` }}
-                        />
-                      </div>
+              {/* Posts list */}
+              {loadingPosts ? (
+                <div className="space-y-3">
+                  {[1,2,3].map(i => (
+                    <div key={i} className="bg-white rounded-2xl border border-gray-100 p-4 animate-pulse">
+                      <div className="h-3 bg-gray-100 rounded w-3/4 mb-2" />
+                      <div className="h-3 bg-gray-100 rounded w-1/2" />
                     </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1">
+                  {posts.length === 0 && (
+                    <div className="bg-white rounded-2xl border border-dashed border-gray-200 p-8 text-center">
+                      <p className="text-sm text-gray-400">投稿がありません。「最新データ取得」ボタンで取得してください。</p>
+                    </div>
+                  )}
+                  {posts.map(p => (
+                    <div key={p.id} className={`bg-white rounded-2xl border p-4 transition-all hover:shadow-sm ${p.is_buzz ? 'border-[#C9A84C]/40 bg-[#FDFBF6]' : 'border-gray-100'}`}>
+                      {p.is_buzz && (
+                        <span className="inline-flex items-center gap-1 text-xs text-[#C9A84C] font-semibold bg-[#FDF8EE] px-2 py-0.5 rounded-full mb-2 border border-[#C9A84C]/20">
+                          <Flame size={10} /> バズ投稿
+                        </span>
+                      )}
+                      <p className="text-sm text-gray-800 leading-relaxed">{p.text || '（テキストなし）'}</p>
 
-                    <div className="flex items-center justify-between mt-2">
-                      <div className="flex gap-4 text-xs text-gray-500">
-                        <span className="flex items-center gap-1">
-                          <Heart size={11} className="text-rose-400" />
-                          {p.likes_count.toLocaleString()}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <MessageCircle size={11} className="text-blue-400" />
-                          {p.replies_count.toLocaleString()}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Repeat2 size={11} className="text-emerald-400" />
-                          {p.reposts_count.toLocaleString()}
-                        </span>
+                      {/* Engagement bar */}
+                      <div className="mt-3">
+                        <div className="h-1 bg-gray-100 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all ${p.is_buzz ? 'bg-[#C9A84C]' : 'bg-[#1E3464]/25'}`}
+                            style={{ width: `${Math.max((p.likes_count / maxLikes) * 100, 2)}%` }}
+                          />
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        {p.posted_at && (
-                          <span className="text-[10px] text-gray-400">
-                            {new Date(p.posted_at).toLocaleDateString('ja-JP', { month: 'short', day: 'numeric' })}
+
+                      <div className="flex items-center justify-between mt-2">
+                        <div className="flex gap-4 text-xs text-gray-500">
+                          <span className="flex items-center gap-1 font-medium">
+                            <Heart size={11} className="text-rose-400" />
+                            {p.likes_count.toLocaleString()}
                           </span>
-                        )}
-                        <button
-                          onClick={() => analyze(p)}
-                          className="text-xs text-[#1E3464] hover:text-[#162A52] flex items-center gap-1 font-medium transition-colors"
-                        >
-                          <RefreshCw size={10} /> AI分析
-                        </button>
+                          <span className="flex items-center gap-1">
+                            <MessageCircle size={11} className="text-blue-400" />
+                            {p.replies_count.toLocaleString()}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Repeat2 size={11} className="text-emerald-400" />
+                            {p.reposts_count.toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {p.posted_at && (
+                            <span className="text-[10px] text-gray-400">
+                              {new Date(p.posted_at).toLocaleDateString('ja-JP', { month: 'short', day: 'numeric' })}
+                            </span>
+                          )}
+                          <button
+                            onClick={() => analyze(p)}
+                            className="text-xs text-[#1E3464] hover:text-[#162A52] flex items-center gap-1 font-medium transition-colors px-2 py-1 rounded-full hover:bg-[#EEF1F8]"
+                          >
+                            <Zap size={10} /> AI分析
+                          </button>
+                        </div>
                       </div>
-                    </div>
 
-                    {analysis[p.id] && (
-                      <div className="mt-3 p-3 bg-[#EEF1F8] border border-[#1E3464]/10 rounded-xl text-xs text-gray-700 whitespace-pre-wrap leading-relaxed">
-                        {analysis[p.id]}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
+                      {analysis[p.id] && (
+                        <div className="mt-3 p-3 bg-[#EEF1F8] border border-[#1E3464]/10 rounded-xl text-xs text-gray-700 whitespace-pre-wrap leading-relaxed">
+                          {analysis[p.id]}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           ) : (
-            <div className="bg-white rounded-2xl border border-dashed border-gray-200 flex items-center justify-center h-64">
+            <div className="bg-white rounded-2xl border border-dashed border-gray-200 flex flex-col items-center justify-center h-80 gap-4">
+              <div className="w-16 h-16 bg-[#EEF1F8] rounded-full flex items-center justify-center">
+                <Users size={26} className="text-[#1E3464]" />
+              </div>
               <div className="text-center">
-                <div className="w-14 h-14 bg-[#EEF1F8] rounded-full flex items-center justify-center mx-auto mb-3">
-                  <Users size={22} className="text-[#1E3464]" />
-                </div>
-                <p className="text-gray-400 text-sm">競合アカウントを選択してください</p>
+                <p className="text-gray-600 text-sm font-medium">競合アカウントを選択</p>
+                <p className="text-gray-400 text-xs mt-1">左のリストからアカウントを選択すると<br />投稿・エンゲージメントデータを表示します</p>
               </div>
             </div>
           )}
