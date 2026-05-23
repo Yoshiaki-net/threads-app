@@ -4,7 +4,16 @@ import { userSettingsApi } from '@/lib/api'
 import { toast } from '@/components/Toast'
 import axios from 'axios'
 import { getToken } from '@/lib/auth'
-import { Bell, Link, CheckCircle, Unlink, ExternalLink, Send, Save } from 'lucide-react'
+import { Bell, Link, CheckCircle, Unlink, ExternalLink, Send, Save, AlertCircle, RefreshCw, Info, ChevronDown, ChevronUp } from 'lucide-react'
+
+const ERROR_MESSAGES: Record<string, string> = {
+  token_exchange_failed: 'アクセストークンの取得に失敗しました。リダイレクトURIがMeta Developer Consoleと一致しているか確認してください。',
+  no_access_token: 'Threadsからトークンが返されませんでした。アプリが正しく設定されているか確認してください。',
+  user_not_found: 'ユーザーが見つかりません。再ログインしてから試してください。',
+  invalid_state: '不正なリクエストです。もう一度お試しください。',
+  missing_code_or_state: '認証コードが取得できませんでした。',
+  access_denied: 'Threads連携がキャンセルされました。',
+}
 
 export default function SettingsPage() {
   const [threadsStatus, setThreadsStatus] = useState<{ connected: boolean; username: string } | null>(null)
@@ -19,11 +28,34 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
   const [connecting, setConnecting] = useState(false)
+  const [configInfo, setConfigInfo] = useState<any>(null)
+  const [showConfig, setShowConfig] = useState(false)
+  const [errorMsg, setErrorMsg] = useState('')
+
+  const api = () => {
+    const a = axios.create({ baseURL: '/api' })
+    const token = getToken()
+    if (token) a.defaults.headers.common['Authorization'] = `Bearer ${token}`
+    return a
+  }
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
-    if (params.get('connected') === 'true') toast.success('Threadsアカウントを連携しました！')
-    if (params.get('error')) toast.error('連携に失敗しました。もう一度お試しください。')
+
+    if (params.get('connected') === 'true') {
+      const uname = params.get('username')
+      toast.success(uname ? `@${uname} を連携しました！` : 'Threadsアカウントを連携しました！')
+      window.history.replaceState({}, '', '/settings')
+    }
+
+    const errCode = params.get('error')
+    if (errCode) {
+      const detail = params.get('detail') || params.get('error_desc') || ''
+      const msg = ERROR_MESSAGES[errCode] || `連携に失敗しました (${errCode}${detail ? ': ' + detail : ''})`
+      setErrorMsg(msg)
+      toast.error(msg)
+      window.history.replaceState({}, '', '/settings')
+    }
 
     loadThreadsStatus()
     loadSettings()
@@ -31,9 +63,7 @@ export default function SettingsPage() {
 
   const loadThreadsStatus = async () => {
     try {
-      const a = axios.create({ baseURL: '/api' })
-      const token = getToken()
-      const res = await a.get('/auth/me/threads-status', { headers: { Authorization: `Bearer ${token}` } })
+      const res = await api().get('/auth/me/threads-status')
       setThreadsStatus(res.data)
     } catch {}
   }
@@ -50,6 +80,16 @@ export default function SettingsPage() {
         notifications_enabled: data.notifications_enabled,
       })
     } catch {}
+  }
+
+  const loadConfigCheck = async () => {
+    try {
+      const res = await api().get('/auth/threads/config-check')
+      setConfigInfo(res.data)
+      setShowConfig(true)
+    } catch (e: any) {
+      toast.error(e.response?.data?.detail || '設定確認に失敗しました')
+    }
   }
 
   const save = async () => {
@@ -74,22 +114,22 @@ export default function SettingsPage() {
 
   const connectThreads = async () => {
     setConnecting(true)
+    setErrorMsg('')
     try {
-      const a = axios.create({ baseURL: '/api' })
-      const token = getToken()
-      const res = await a.get('/auth/threads/authorize', { headers: { Authorization: `Bearer ${token}` } })
+      const res = await api().get('/auth/threads/authorize')
       window.location.href = res.data.url
-    } catch {
-      toast.error('連携URLの取得に失敗しました')
+    } catch (e: any) {
+      const detail = e.response?.data?.detail || '連携URLの取得に失敗しました'
+      setErrorMsg(detail)
+      toast.error(detail)
       setConnecting(false)
     }
   }
 
   const disconnectThreads = async () => {
+    if (!confirm('Threads連携を解除しますか？')) return
     try {
-      const a = axios.create({ baseURL: '/api' })
-      const token = getToken()
-      await a.delete('/auth/threads/disconnect', { headers: { Authorization: `Bearer ${token}` } })
+      await api().delete('/auth/threads/disconnect')
       setThreadsStatus({ connected: false, username: '' })
       toast.success('Threadsアカウントの連携を解除しました')
     } catch {
@@ -111,9 +151,18 @@ export default function SettingsPage() {
           <h3 className="text-sm font-semibold text-gray-800 mb-4 flex items-center gap-2">
             <Link size={15} className="text-[#C9A84C]" /> Threads アカウント連携
           </h3>
+
+          {/* Error message */}
+          {errorMsg && (
+            <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-xl mb-4 text-sm text-red-700">
+              <AlertCircle size={16} className="flex-shrink-0 mt-0.5" />
+              <p>{errorMsg}</p>
+            </div>
+          )}
+
           {threadsStatus?.connected ? (
             <div>
-              <div className="flex items-center gap-3 p-4 bg-green-50 rounded-xl mb-4">
+              <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-100 rounded-xl mb-4">
                 <CheckCircle size={18} className="text-green-500" />
                 <div>
                   <p className="text-sm font-medium text-green-700">連携済み</p>
@@ -125,12 +174,45 @@ export default function SettingsPage() {
               </button>
             </div>
           ) : (
-            <div>
-              <p className="text-sm text-gray-500 mb-4">Threadsアカウントを連携すると、自動投稿や分析が利用できます。</p>
-              <button onClick={connectThreads} disabled={connecting} className="flex items-center gap-2 px-5 py-2.5 bg-[#1E3464] text-white rounded-xl text-sm font-medium hover:bg-[#162A52] disabled:opacity-50 transition-colors">
-                <ExternalLink size={13} /> {connecting ? '連携中...' : 'Threadsで連携する'}
+            <div className="space-y-3">
+              <p className="text-sm text-gray-500">Threadsアカウントを連携すると、自動投稿や分析が利用できます。</p>
+              <button
+                onClick={connectThreads}
+                disabled={connecting}
+                className="flex items-center gap-2 px-5 py-2.5 bg-[#1E3464] text-white rounded-xl text-sm font-medium hover:bg-[#162A52] disabled:opacity-50 transition-colors"
+              >
+                {connecting
+                  ? <RefreshCw size={13} className="animate-spin" />
+                  : <ExternalLink size={13} />
+                }
+                {connecting ? '連携中...' : 'Threadsで連携する'}
               </button>
-              <p className="text-xs text-gray-400 mt-3">※ Meta Developer Appの審査が完了している必要があります</p>
+              <p className="text-xs text-gray-400">※ Meta Developer Appの審査が完了している必要があります</p>
+
+              {/* Config check accordion */}
+              <div className="border border-gray-100 rounded-xl overflow-hidden mt-2">
+                <button
+                  onClick={() => showConfig ? setShowConfig(false) : loadConfigCheck()}
+                  className="w-full flex items-center justify-between px-4 py-2.5 text-xs text-gray-500 hover:bg-gray-50 transition-colors"
+                >
+                  <span className="flex items-center gap-1.5"><Info size={12} /> 設定の診断</span>
+                  {showConfig ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                </button>
+                {showConfig && configInfo && (
+                  <div className="px-4 pb-4 pt-1 space-y-2 bg-gray-50 border-t border-gray-100">
+                    <ConfigRow label="THREADS_APP_ID" ok={configInfo.app_id_set} okText="設定済み" ngText="未設定" />
+                    <ConfigRow label="THREADS_APP_SECRET" ok={configInfo.app_secret_set} okText="設定済み" ngText="未設定" />
+                    <ConfigRow label="BACKEND_URL" ok={!configInfo.backend_url.includes('localhost')} okText={configInfo.backend_url} ngText={`${configInfo.backend_url} ← localhostのまま！`} />
+                    <ConfigRow label="FRONTEND_URL" ok={!configInfo.frontend_url.includes('localhost')} okText={configInfo.frontend_url} ngText={`${configInfo.frontend_url} ← localhostのまま！`} />
+                    <div className="pt-2 border-t border-gray-200">
+                      <p className="text-[10px] text-gray-500 font-medium mb-1">Meta Developer ConsoleのリダイレクトURIに以下を登録してください:</p>
+                      <code className="text-[11px] bg-white border border-gray-200 px-2 py-1 rounded block break-all text-[#1E3464]">
+                        {configInfo.redirect_uri}
+                      </code>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -142,7 +224,6 @@ export default function SettingsPage() {
           </h3>
 
           <div className="space-y-4">
-            {/* Enable toggle */}
             <div className="flex items-center justify-between py-2">
               <div>
                 <p className="text-sm font-medium text-gray-700">通知を有効にする</p>
@@ -156,7 +237,6 @@ export default function SettingsPage() {
               </button>
             </div>
 
-            {/* Webhook URL */}
             <div>
               <label className="text-xs font-medium text-gray-500 mb-1.5 block">Discord Webhook URL</label>
               <div className="flex gap-2">
@@ -177,7 +257,6 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            {/* Buzz threshold */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-xs font-medium text-gray-500 mb-1.5 block">バズ閾値（いいね数）</label>
@@ -204,7 +283,6 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            {/* Monitor interval */}
             <div>
               <label className="text-xs font-medium text-gray-500 mb-1.5 block">監視間隔（分）</label>
               <select
@@ -228,6 +306,18 @@ export default function SettingsPage() {
             </button>
           </div>
         </div>
+      </div>
+    </div>
+  )
+}
+
+function ConfigRow({ label, ok, okText, ngText }: { label: string; ok: boolean; okText: string; ngText: string }) {
+  return (
+    <div className="flex items-start gap-2 text-xs">
+      <span className={`flex-shrink-0 font-bold mt-0.5 ${ok ? 'text-green-500' : 'text-red-500'}`}>{ok ? '✓' : '✗'}</span>
+      <div className="min-w-0">
+        <span className="font-medium text-gray-600">{label}: </span>
+        <span className={ok ? 'text-gray-700' : 'text-red-600 font-medium'}>{ok ? okText : ngText}</span>
       </div>
     </div>
   )
