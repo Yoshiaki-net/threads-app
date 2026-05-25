@@ -285,9 +285,26 @@ export default function CompetitorsPage() {
   const load = useCallback(() => competitorApi.list().then(setCompetitors), [])
   useEffect(() => { load() }, [load])
 
+  /** URLやURLエンコードされた入力からユーザー名 or IDを抽出する */
+  const normalizeInput = (raw: string): string => {
+    const s = raw.trim()
+    // Full URL: https://www.threads.net/@username or https://threads.net/@username
+    try {
+      const url = new URL(s)
+      if (url.hostname.includes('threads')) {
+        // pathname: /@username or /@username/post/...
+        const match = url.pathname.match(/\/@([^/?#]+)/)
+        if (match) return match[1]
+      }
+    } catch {}
+    // @username → strip @
+    return s.replace(/^@/, '')
+  }
+
   const searchUser = async (overrideQuery?: string) => {
-    const q = (overrideQuery ?? searchQuery).trim()
-    if (!q) return
+    const raw = (overrideQuery ?? searchQuery).trim()
+    if (!raw) return
+    const q = normalizeInput(raw)
     setPreviewing(true)
     setPreview(null)
     setSearchError('')
@@ -447,9 +464,9 @@ export default function CompetitorsPage() {
               <div className="flex gap-2">
                 <input
                   className="flex-1 border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A84C] bg-gray-50"
-                  placeholder="例: @yoshi_writing_sns または yoshi_writing_sns"
+                  placeholder="@ユーザー名 / URL / 数字ID どれでもOK"
                   value={searchQuery}
-                  onChange={e => { setSearchQuery(e.target.value); setPreview(null); setSearchError('') }}
+                  onChange={e => { setSearchQuery(e.target.value); setPreview(null); setSearchError(''); setShowManualId(false) }}
                   onKeyDown={e => e.key === 'Enter' && searchUser()}
                 />
                 <button
@@ -461,7 +478,7 @@ export default function CompetitorsPage() {
                   検索
                 </button>
               </div>
-              <p className="text-xs text-gray-400 mt-1">@マークあり・なしどちらでもOK。Threads連携が必要です。</p>
+              <p className="text-xs text-gray-400 mt-1">URLをそのまま貼り付けてもOK。@ユーザー名・数字ID・ThreadsのURLに対応。</p>
             </div>
 
             {/* Error + fallback */}
