@@ -269,8 +269,11 @@ export default function CompetitorsPage() {
   const [preview, setPreview] = useState<Preview | null>(null)
   const [previewing, setPreviewing] = useState(false)
   const [searchError, setSearchError] = useState('')
+  const [searchHint, setSearchHint] = useState('')
   const [showAddForm, setShowAddForm] = useState(false)
   const [adding, setAdding] = useState(false)
+  const [showManualId, setShowManualId] = useState(false)
+  const [manualId, setManualId] = useState('')
 
   // Followers inline edit
   const [editingFollowers, setEditingFollowers] = useState<number | null>(null)
@@ -282,14 +285,15 @@ export default function CompetitorsPage() {
   const load = useCallback(() => competitorApi.list().then(setCompetitors), [])
   useEffect(() => { load() }, [load])
 
-  const searchUser = async () => {
-    if (!searchQuery.trim()) return
+  const searchUser = async (overrideQuery?: string) => {
+    const q = (overrideQuery ?? searchQuery).trim()
+    if (!q) return
     setPreviewing(true)
     setPreview(null)
     setSearchError('')
-    const q = searchQuery.trim()
+    setSearchHint('')
+    setShowManualId(false)
     try {
-      // First try username search
       const data = await competitorApi.search(q)
       if (data.error) {
         setSearchError('Threadsを連携してください（設定ページ）')
@@ -299,17 +303,22 @@ export default function CompetitorsPage() {
         setPreview(data.results[0])
         return
       }
-      // Fallback: try as user ID if numeric
-      if (/^\d+$/.test(q)) {
-        const data2 = await competitorApi.lookup(q)
-        if (!data2.error) { setPreview(data2); return }
-      }
-      setSearchError('アカウントが見つかりませんでした。@なしのユーザー名か数字のIDを入力してください。')
-    } catch {
-      setSearchError('検索に失敗しました。もう一度お試しください。')
+      // Not found
+      setSearchError(data.message || 'アカウントが見つかりませんでした')
+      setSearchHint(data.hint || '')
+      setShowManualId(true)
+    } catch (e: any) {
+      setSearchError(e.response?.data?.detail || '検索に失敗しました。もう一度お試しください。')
+      setShowManualId(true)
     } finally {
       setPreviewing(false)
     }
+  }
+
+  const searchByManualId = () => {
+    if (!manualId.trim()) return
+    setSearchQuery(manualId.trim())
+    searchUser(manualId.trim())
   }
 
   const add = async () => {
@@ -444,7 +453,7 @@ export default function CompetitorsPage() {
                   onKeyDown={e => e.key === 'Enter' && searchUser()}
                 />
                 <button
-                  onClick={searchUser}
+                  onClick={() => searchUser()}
                   disabled={previewing || !searchQuery.trim()}
                   className="flex items-center gap-2 px-4 py-2.5 bg-[#1E3464] text-white rounded-xl text-sm font-medium hover:bg-[#162A52] disabled:opacity-50 transition-colors flex-shrink-0"
                 >
@@ -455,10 +464,41 @@ export default function CompetitorsPage() {
               <p className="text-xs text-gray-400 mt-1">@マークあり・なしどちらでもOK。Threads連携が必要です。</p>
             </div>
 
-            {/* Error */}
+            {/* Error + fallback */}
             {searchError && (
-              <div className="text-xs text-red-500 bg-red-50 border border-red-100 rounded-xl px-4 py-2.5">
-                {searchError}
+              <div className="space-y-2">
+                <div className="text-xs text-red-500 bg-red-50 border border-red-100 rounded-xl px-4 py-2.5">
+                  {searchError}
+                </div>
+                {searchHint && (
+                  <p className="text-xs text-gray-400 px-1">{searchHint}</p>
+                )}
+                {showManualId && (
+                  <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 space-y-2">
+                    <p className="text-xs font-medium text-gray-600">📋 Threads ユーザーIDで直接入力</p>
+                    <p className="text-xs text-gray-400">
+                      Threadsのプロフィールページ URL:
+                      <code className="bg-white border border-gray-200 rounded px-1 ml-1">www.threads.net/@ユーザー名</code>
+                      を開き、ページ内の数字IDをコピーしてください。
+                    </p>
+                    <div className="flex gap-2">
+                      <input
+                        className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A84C] bg-white"
+                        placeholder="数字のユーザーID（例: 1234567890）"
+                        value={manualId}
+                        onChange={e => setManualId(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && searchByManualId()}
+                      />
+                      <button
+                        onClick={searchByManualId}
+                        disabled={previewing || !manualId.trim()}
+                        className="px-4 py-2 bg-[#1E3464] text-white rounded-xl text-sm font-medium disabled:opacity-50 hover:bg-[#162A52] transition-colors flex-shrink-0"
+                      >
+                        検索
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

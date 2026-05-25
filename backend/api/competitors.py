@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime, timedelta
+import re
 from database import get_db
 from models import Competitor, CompetitorPost, CompetitorEngagementHistory, User
 from services.threads_client import ThreadsClient
@@ -100,32 +101,45 @@ async def lookup_competitor(
 
 @router.get("/search")
 async def search_competitor(
-    q: str = Query(..., description="Username or display name to search"),
+    q: str = Query(..., description="Username (with or without @) or numeric Threads user ID"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Search a Threads user by username (with or without @)."""
+    """Search a Threads user by username or user ID."""
     token = current_user.threads_access_token
     if not token:
-        return {"error": "Threads未連携", "results": []}
+        return {"error": "Threads未連携", "results": [], "hint": "設定ページでThreadsを連携してください"}
 
-    username = q.lstrip("@").strip()
+    q = q.strip()
     client = ThreadsClient(access_token=token)
+    profile = None
     try:
-        profile = await client.search_by_username(username)
+        # If numeric ID → look up directly
+        if re.match(r"^\d+$", q):
+            try:
+                profile = await client.get_user_profile(q)
+            except Exception as e:
+                print(f"[search] Direct ID lookup failed: {e}")
+        else:
+            # Username search via web scrape
+            profile = await client.search_by_username(q)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"検索失敗: {e}")
+        print(f"[search] Error: {e}")
     finally:
         await client.close()
 
-    if not profile:
-        return {"results": [], "message": "ユーザーが見つかりませんでした"}
+    if not profile or not profile.get("id"):
+        return {
+            "results": [],
+            "message": f"@{q.lstrip('@')} が見つかりませんでした",
+            "hint": "ユーザー名が正確か確認するか、ThreadsプロフィールURLの数字（ユーザーID）を入力してください"
+        }
 
     return {
         "results": [{
             "threads_user_id": profile.get("id", ""),
-            "username": profile.get("username", username),
-            "display_name": profile.get("name", profile.get("username", username)),
+            "username": profile.get("username", q.lstrip("@")),
+            "display_name": profile.get("name", profile.get("username", q.lstrip("@"))),
             "profile_picture_url": profile.get("threads_profile_picture_url"),
             "bio": profile.get("threads_biography"),
         }]
