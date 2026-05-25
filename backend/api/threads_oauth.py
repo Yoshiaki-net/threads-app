@@ -17,7 +17,8 @@ SCOPES = "threads_basic,threads_content_publish,threads_manage_insights,threads_
 
 def get_redirect_uri() -> str:
     """Always compute REDIRECT_URI from current settings (not cached at import time)."""
-    return f"{settings.backend_url}/api/auth/threads/callback"
+    base = settings.backend_url.rstrip("/")  # strip trailing slash to avoid double-slash
+    return f"{base}/api/auth/threads/callback"
 
 
 @router.get("/config-check")
