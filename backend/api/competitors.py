@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 import re
 from database import get_db
 from models import Competitor, CompetitorPost, CompetitorEngagementHistory, User
-from services.threads_client import ThreadsClient
+from services.threads_client import ThreadsClient, UserNotAccessibleError
 from auth import get_current_user
 
 router = APIRouter(prefix="/api/competitors", tags=["competitors"])
@@ -113,37 +113,49 @@ async def search_competitor(
     q = q.strip()
     client = ThreadsClient(access_token=token)
     profile = None
+    not_accessible = False
     try:
-        # If numeric ID → look up directly
         if re.match(r"^\d+$", q):
+            # Direct numeric ID lookup
             try:
                 profile = await client.get_user_profile(q)
+            except UserNotAccessibleError as e:
+                not_accessible = True
+                print(f"[search] User {q} not accessible: {e}")
             except Exception as e:
                 print(f"[search] Direct ID lookup failed: {e}")
         else:
-            # Username search via web scrape
             profile = await client.search_by_username(q)
     except Exception as e:
         print(f"[search] Error: {e}")
     finally:
         await client.close()
 
+    if not_accessible:
+        return {
+            "results": [],
+            "message": "このアカウントへのアクセス権限がありません",
+            "hint": "開発モードではThreadsテスターに追加されたアカウントのみアクセス可能です。Meta Developer Consoleで対象アカウントをテスターに追加するか、アプリ審査を完了させてください。",
+            "error_type": "not_accessible"
+        }
+
     if not profile or not profile.get("id"):
         return {
             "results": [],
             "message": f"@{q.lstrip('@')} が見つかりませんでした",
-            "hint": "ユーザー名が正確か確認するか、ThreadsプロフィールURLの数字（ユーザーID）を入力してください"
+            "hint": "ユーザー名が正確か確認するか、数字のユーザーIDを直接入力してください",
+            "error_type": "not_found"
         }
 
-    return {
-        "results": [{
-            "threads_user_id": profile.get("id", ""),
-            "username": profile.get("username", q.lstrip("@")),
-            "display_name": profile.get("name", profile.get("username", q.lstrip("@"))),
-            "profile_picture_url": profile.get("threads_profile_picture_url"),
-            "bio": profile.get("threads_biography"),
-        }]
+    result = {
+        "threads_user_id": profile.get("id", ""),
+        "username": profile.get("username", q.lstrip("@")),
+        "display_name": profile.get("name", profile.get("username", q.lstrip("@"))),
+        "profile_picture_url": profile.get("threads_profile_picture_url"),
+        "bio": profile.get("threads_biography"),
+        "_source": profile.get("_source", "api"),
     }
+    return {"results": [result]}
 
 
 @router.get("/", response_model=list[CompetitorResponse])

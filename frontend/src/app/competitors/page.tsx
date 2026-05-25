@@ -270,10 +270,12 @@ export default function CompetitorsPage() {
   const [previewing, setPreviewing] = useState(false)
   const [searchError, setSearchError] = useState('')
   const [searchHint, setSearchHint] = useState('')
+  const [searchErrorType, setSearchErrorType] = useState<'not_found' | 'not_accessible' | null>(null)
   const [showAddForm, setShowAddForm] = useState(false)
   const [adding, setAdding] = useState(false)
   const [showManualId, setShowManualId] = useState(false)
   const [manualId, setManualId] = useState('')
+  const [showIdHelp, setShowIdHelp] = useState(false)
 
   // Followers inline edit
   const [editingFollowers, setEditingFollowers] = useState<number | null>(null)
@@ -309,6 +311,7 @@ export default function CompetitorsPage() {
     setPreview(null)
     setSearchError('')
     setSearchHint('')
+    setSearchErrorType(null)
     setShowManualId(false)
     try {
       const data = await competitorApi.search(q)
@@ -320,10 +323,11 @@ export default function CompetitorsPage() {
         setPreview(data.results[0])
         return
       }
-      // Not found
       setSearchError(data.message || 'アカウントが見つかりませんでした')
       setSearchHint(data.hint || '')
-      setShowManualId(true)
+      setSearchErrorType(data.error_type || 'not_found')
+      // not_accessible だとIDを変えても解決しないので manual ID を出さない
+      setShowManualId(data.error_type !== 'not_accessible')
     } catch (e: any) {
       setSearchError(e.response?.data?.detail || '検索に失敗しました。もう一度お試しください。')
       setShowManualId(true)
@@ -484,20 +488,40 @@ export default function CompetitorsPage() {
             {/* Error + fallback */}
             {searchError && (
               <div className="space-y-2">
-                <div className="text-xs text-red-500 bg-red-50 border border-red-100 rounded-xl px-4 py-2.5">
-                  {searchError}
+                <div className={`text-xs border rounded-xl px-4 py-2.5 flex items-start gap-2 ${
+                  searchErrorType === 'not_accessible'
+                    ? 'text-amber-700 bg-amber-50 border-amber-200'
+                    : 'text-red-600 bg-red-50 border-red-100'
+                }`}>
+                  <span>{searchErrorType === 'not_accessible' ? '⚠️' : '❌'}</span>
+                  <div className="flex-1">
+                    <p className="font-medium">{searchError}</p>
+                    {searchHint && <p className="text-[11px] mt-1 opacity-80">{searchHint}</p>}
+                  </div>
                 </div>
-                {searchHint && (
-                  <p className="text-xs text-gray-400 px-1">{searchHint}</p>
+
+                {searchErrorType === 'not_accessible' && (
+                  <a
+                    href="https://developers.facebook.com/apps/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-xs text-[#1E3464] hover:underline px-1"
+                  >
+                    → Meta Developer Console を開く
+                  </a>
                 )}
+
                 {showManualId && (
                   <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 space-y-2">
-                    <p className="text-xs font-medium text-gray-600">📋 Threads ユーザーIDで直接入力</p>
-                    <p className="text-xs text-gray-400">
-                      Threadsのプロフィールページ URL:
-                      <code className="bg-white border border-gray-200 rounded px-1 ml-1">www.threads.net/@ユーザー名</code>
-                      を開き、ページ内の数字IDをコピーしてください。
-                    </p>
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-medium text-gray-600">📋 数字IDで直接追加</p>
+                      <button
+                        onClick={() => setShowIdHelp(true)}
+                        className="text-xs text-[#1E3464] hover:underline"
+                      >
+                        ID の調べ方
+                      </button>
+                    </div>
                     <div className="flex gap-2">
                       <input
                         className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A84C] bg-white"
@@ -516,6 +540,53 @@ export default function CompetitorsPage() {
                     </div>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* ID help modal */}
+            {showIdHelp && (
+              <div
+                className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+                onClick={() => setShowIdHelp(false)}
+              >
+                <div
+                  className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4"
+                  onClick={e => e.stopPropagation()}
+                >
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-bold text-gray-900">Threads ユーザーIDの調べ方</h3>
+                    <button onClick={() => setShowIdHelp(false)} className="text-gray-400 hover:text-gray-600">
+                      <X size={18} />
+                    </button>
+                  </div>
+                  <div className="space-y-3 text-sm text-gray-600">
+                    <div>
+                      <p className="font-medium text-gray-800 mb-1">方法1: ブラウザの開発者ツール</p>
+                      <ol className="list-decimal list-inside space-y-1 text-xs leading-relaxed">
+                        <li>対象のThreadsプロフィールを開く</li>
+                        <li>右クリック → 「ページのソースを表示」</li>
+                        <li>Cmd+F（Mac）/ Ctrl+F（Win）で <code className="bg-gray-100 px-1 rounded">user_id</code> を検索</li>
+                        <li>表示される長い数字をコピー</li>
+                      </ol>
+                    </div>
+                    <div>
+                      <p className="font-medium text-gray-800 mb-1">方法2: 外部ツール</p>
+                      <p className="text-xs leading-relaxed">
+                        <a
+                          href="https://commentpicker.com/instagram-user-id.php"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[#1E3464] hover:underline"
+                        >Instagram User ID Finder</a>
+                        にThreadsと同じユーザー名を入力（Threads IDはInstagram IDと同一）
+                      </p>
+                    </div>
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-700">
+                      <p className="font-medium mb-0.5">⚠️ 開発モードの制限</p>
+                      <p>Meta App審査前は、Threadsテスターに追加されたアカウントしかデータ取得できません。</p>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 
