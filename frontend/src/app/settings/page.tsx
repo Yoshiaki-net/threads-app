@@ -4,7 +4,7 @@ import { userSettingsApi } from '@/lib/api'
 import { toast } from '@/components/Toast'
 import axios from 'axios'
 import { getToken } from '@/lib/auth'
-import { Bell, Link, CheckCircle, Unlink, ExternalLink, Send, Save, AlertCircle, RefreshCw, Info, ChevronDown, ChevronUp } from 'lucide-react'
+import { Bell, Link, CheckCircle, Unlink, ExternalLink, Send, Save, AlertCircle, RefreshCw, Info, ChevronDown, ChevronUp, Key, Check } from 'lucide-react'
 
 const ERROR_MESSAGES: Record<string, string> = {
   token_exchange_failed: 'アクセストークンの取得に失敗しました。リダイレクトURIがMeta Developer Consoleと一致しているか確認してください。',
@@ -31,6 +31,9 @@ export default function SettingsPage() {
   const [configInfo, setConfigInfo] = useState<any>(null)
   const [showConfig, setShowConfig] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
+  const [manualToken, setManualToken] = useState('')
+  const [savingToken, setSavingToken] = useState(false)
+  const [showManualInput, setShowManualInput] = useState(false)
 
   const api = () => {
     const a = axios.create({ baseURL: '/api' })
@@ -126,6 +129,20 @@ export default function SettingsPage() {
     }
   }
 
+  const saveManualToken = async () => {
+    if (!manualToken.trim()) return
+    setSavingToken(true)
+    try {
+      const res = await api().post('/auth/threads/manual-token', { access_token: manualToken.trim() })
+      setThreadsStatus({ connected: true, username: res.data.username })
+      setManualToken('')
+      setShowManualInput(false)
+      toast.success(`@${res.data.username} を連携しました！`)
+    } catch (e: any) {
+      toast.error(e.response?.data?.detail || 'トークンが無効です')
+    } finally { setSavingToken(false) }
+  }
+
   const disconnectThreads = async () => {
     if (!confirm('Threads連携を解除しますか？')) return
     try {
@@ -188,6 +205,41 @@ export default function SettingsPage() {
                 {connecting ? '連携中...' : 'Threadsで連携する'}
               </button>
               <p className="text-xs text-gray-400">※ Meta Developer Appの審査が完了している必要があります</p>
+
+              {/* Manual token input */}
+              <div className="border border-gray-100 rounded-xl overflow-hidden">
+                <button
+                  onClick={() => setShowManualInput(v => !v)}
+                  className="w-full flex items-center justify-between px-4 py-2.5 text-xs text-gray-500 hover:bg-gray-50 transition-colors"
+                >
+                  <span className="flex items-center gap-1.5"><Key size={12} /> トークンを手動で入力（OAuthが使えない場合）</span>
+                  {showManualInput ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                </button>
+                {showManualInput && (
+                  <div className="px-4 pb-4 pt-2 bg-gray-50 border-t border-gray-100 space-y-2">
+                    <p className="text-xs text-gray-500">
+                      Meta Developer Console →「Threads APIにアクセス」→「設定」→「ユーザートークン生成ツール」→「アクセストークンを生成」でトークンを取得して貼り付けてください。
+                    </p>
+                    <div className="flex gap-2">
+                      <input
+                        type="password"
+                        value={manualToken}
+                        onChange={e => setManualToken(e.target.value)}
+                        placeholder="取得したアクセストークンを貼り付け"
+                        className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-[#C9A84C] bg-white"
+                      />
+                      <button
+                        onClick={saveManualToken}
+                        disabled={savingToken || !manualToken.trim()}
+                        className="px-4 py-2 bg-[#1E3464] text-white rounded-xl text-xs font-medium disabled:opacity-50 hover:bg-[#162A52] transition-colors flex items-center gap-1.5"
+                      >
+                        {savingToken ? <RefreshCw size={11} className="animate-spin" /> : <Check size={11} />}
+                        設定
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
 
               {/* Config check accordion */}
               <div className="border border-gray-100 rounded-xl overflow-hidden mt-2">

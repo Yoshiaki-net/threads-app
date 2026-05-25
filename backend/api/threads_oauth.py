@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse, JSONResponse
 from sqlalchemy.orm import Session
+from pydantic import BaseModel
 import httpx
 from database import get_db
 from models import User
@@ -142,6 +143,41 @@ async def callback(request: Request, db: Session = Depends(get_db), code: str = 
 
     print(f"[Threads OAuth] Connected: user_id={user.id}, threads_username={username}")
     return RedirectResponse(f"{frontend}/settings?connected=true&username={username}")
+
+
+class ManualTokenRequest(BaseModel):
+    access_token: str
+
+@router.post("/manual-token")
+async def set_manual_token(
+    data: ManualTokenRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Accept a manually-generated Threads access token and validate it."""
+    token = data.access_token.strip()
+    if not token:
+        raise HTTPException(status_code=400, detail="トークンを入力してください")
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        resp = await client.get(
+            "https://graph.threads.net/v1.0/me",
+            params={"fields": "id,username,name", "access_token": token},
+        )
+        if resp.status_code != 200:
+            raise HTTPException(status_code=400, detail=f"トークンが無効です: {resp.json().get('error', {}).get('message', resp.text[:100])}")
+        profile = resp.json()
+
+    current_user.threads_access_token = token
+    current_user.threads_user_id = profile.get("id", "")
+    current_user.threads_username = profile.get("username", "")
+    db.commit()
+
+    return {
+        "ok": True,
+        "username": profile.get("username", ""),
+        "user_id": profile.get("id", ""),
+    }
 
 
 @router.delete("/disconnect")
