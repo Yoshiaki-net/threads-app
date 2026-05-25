@@ -28,6 +28,7 @@ export const competitorApi = {
     api.get(`/competitors/${id}/posts`, { params: { buzz_only: buzzOnly } }).then(r => r.data),
   getAllBuzz: () => api.get('/competitors/buzz/all').then(r => r.data),
   lookup: (threads_user_id: string) => api.get('/competitors/lookup', { params: { threads_user_id } }).then(r => r.data),
+  search: (q: string) => api.get('/competitors/search', { params: { q } }).then(r => r.data),
   refresh: (id: number) => api.post(`/competitors/${id}/refresh`).then(r => r.data),
   getHistory: (id: number) => api.get(`/competitors/${id}/history`).then(r => r.data),
   updateFollowers: (id: number, followers_count: number) => api.patch(`/competitors/${id}/followers`, { followers_count }).then(r => r.data),

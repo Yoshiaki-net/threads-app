@@ -19,6 +19,47 @@ class ThreadsClient:
         resp.raise_for_status()
         return resp.json()
 
+    async def search_by_username(self, username: str) -> dict | None:
+        """Look up a Threads user by username. Returns profile dict or None."""
+        username = username.lstrip("@").strip()
+
+        # Method 1: Threads Graph API by_username endpoint
+        try:
+            resp = await self.client.get(
+                f"{THREADS_API_BASE}/by_username",
+                params={
+                    "username": username,
+                    "fields": "id,username,name,threads_profile_picture_url,threads_biography",
+                    "access_token": self.access_token,
+                },
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                if data.get("id"):
+                    return data
+        except Exception:
+            pass
+
+        # Method 2: Graph API username lookup via ?id=@username
+        try:
+            resp2 = await self.client.get(
+                "https://graph.threads.net/v1.0/",
+                params={
+                    "id": username,
+                    "type": "threads_username",
+                    "fields": "id,username,name,threads_profile_picture_url,threads_biography",
+                    "access_token": self.access_token,
+                },
+            )
+            if resp2.status_code == 200:
+                data2 = resp2.json()
+                if data2.get("id"):
+                    return data2
+        except Exception:
+            pass
+
+        return None
+
     async def get_user_threads(self, user_id: str, limit: int = 10) -> dict:
         resp = await self.client.get(
             f"{THREADS_API_BASE}/{user_id}/threads",

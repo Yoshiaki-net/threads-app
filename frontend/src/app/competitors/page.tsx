@@ -264,11 +264,11 @@ export default function CompetitorsPage() {
   const [refreshing, setRefreshing] = useState<number | null>(null)
 
   // Add form
-  const [username, setUsername] = useState('')
-  const [threadsUserId, setThreadsUserId] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
   const [genre, setGenre] = useState('')
   const [preview, setPreview] = useState<Preview | null>(null)
   const [previewing, setPreviewing] = useState(false)
+  const [searchError, setSearchError] = useState('')
   const [showAddForm, setShowAddForm] = useState(false)
   const [adding, setAdding] = useState(false)
 
@@ -282,36 +282,47 @@ export default function CompetitorsPage() {
   const load = useCallback(() => competitorApi.list().then(setCompetitors), [])
   useEffect(() => { load() }, [load])
 
-  const lookupPreview = async () => {
-    if (!threadsUserId.trim()) { toast.error('Threads User IDを入力してください'); return }
+  const searchUser = async () => {
+    if (!searchQuery.trim()) return
     setPreviewing(true)
     setPreview(null)
+    setSearchError('')
+    const q = searchQuery.trim()
     try {
-      const data = await competitorApi.lookup(threadsUserId.trim())
+      // First try username search
+      const data = await competitorApi.search(q)
       if (data.error) {
-        toast.error('Threadsを連携してください（設定ページ）')
-      } else {
-        setPreview(data)
-        if (!username) setUsername(data.username)
+        setSearchError('Threadsを連携してください（設定ページ）')
+        return
       }
+      if (data.results && data.results.length > 0) {
+        setPreview(data.results[0])
+        return
+      }
+      // Fallback: try as user ID if numeric
+      if (/^\d+$/.test(q)) {
+        const data2 = await competitorApi.lookup(q)
+        if (!data2.error) { setPreview(data2); return }
+      }
+      setSearchError('アカウントが見つかりませんでした。@なしのユーザー名か数字のIDを入力してください。')
     } catch {
-      toast.error('プロフィール取得失敗。User IDを確認してください')
+      setSearchError('検索に失敗しました。もう一度お試しください。')
     } finally {
       setPreviewing(false)
     }
   }
 
   const add = async () => {
-    if (!username.trim()) { toast.error('ユーザー名を入力してください'); return }
+    if (!preview) { toast.error('先にアカウントを検索してください'); return }
     setAdding(true)
     try {
       await competitorApi.add(
-        username.trim().replace(/^@/, ''),
-        preview?.threads_user_id || threadsUserId.trim(),
+        preview.username,
+        preview.threads_user_id,
         genre
       )
-      toast.success(`@${username.trim()} を追加しました`)
-      setUsername(''); setThreadsUserId(''); setPreview(null); setGenre(''); setShowAddForm(false)
+      toast.success(`@${preview.username} を追加しました`)
+      setSearchQuery(''); setPreview(null); setGenre(''); setSearchError(''); setShowAddForm(false)
       load()
     } catch (e: any) {
       toast.error(e.response?.data?.detail || '追加に失敗しました')
@@ -418,79 +429,86 @@ export default function CompetitorsPage() {
       {showAddForm && (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-5">
           <h3 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
-            <Plus size={14} className="text-[#C9A84C]" /> 競合アカウントを追加
+            <Search size={14} className="text-[#C9A84C]" /> 競合アカウントを検索して追加
           </h3>
-          <div className="space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs text-gray-500 mb-1 block">Threads User ID <span className="text-gray-400">（プロフィールURLの数字）</span></label>
-                <input
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A84C] bg-gray-50"
-                  placeholder="例: 1234567890"
-                  value={threadsUserId}
-                  onChange={e => { setThreadsUserId(e.target.value); setPreview(null) }}
-                />
-              </div>
-              <div>
-                <label className="text-xs text-gray-500 mb-1 block">ユーザー名 <span className="text-gray-400">（@なし）</span></label>
-                <input
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A84C] bg-gray-50"
-                  placeholder="例: yoshi_writing_sns"
-                  value={username}
-                  onChange={e => setUsername(e.target.value)}
-                />
-              </div>
-            </div>
+          <div className="space-y-4">
+            {/* Search box */}
             <div>
-              <label className="text-xs text-gray-500 mb-1 block flex items-center gap-1"><Tag size={10} /> ジャンル</label>
-              <div className="flex flex-wrap gap-1.5">
-                {GENRES.map(g => (
-                  <button
-                    key={g}
-                    onClick={() => setGenre(genre === g ? '' : g)}
-                    className={`text-xs px-3 py-1 rounded-full border transition-colors ${
-                      genre === g
-                        ? 'bg-[#1E3464] text-white border-[#1E3464]'
-                        : 'border-gray-200 text-gray-500 hover:border-[#1E3464] hover:text-[#1E3464]'
-                    }`}
-                  >
-                    {g}
-                  </button>
-                ))}
+              <label className="text-xs text-gray-500 mb-1.5 block">アカウント名 / ユーザー名</label>
+              <div className="flex gap-2">
+                <input
+                  className="flex-1 border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A84C] bg-gray-50"
+                  placeholder="例: @yoshi_writing_sns または yoshi_writing_sns"
+                  value={searchQuery}
+                  onChange={e => { setSearchQuery(e.target.value); setPreview(null); setSearchError('') }}
+                  onKeyDown={e => e.key === 'Enter' && searchUser()}
+                />
+                <button
+                  onClick={searchUser}
+                  disabled={previewing || !searchQuery.trim()}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-[#1E3464] text-white rounded-xl text-sm font-medium hover:bg-[#162A52] disabled:opacity-50 transition-colors flex-shrink-0"
+                >
+                  {previewing ? <RefreshCw size={13} className="animate-spin" /> : <Search size={13} />}
+                  検索
+                </button>
               </div>
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={lookupPreview}
-                disabled={previewing}
-                className="flex items-center gap-2 px-4 py-2 border border-[#1E3464] text-[#1E3464] rounded-full text-sm font-medium hover:bg-[#EEF1F8] disabled:opacity-50 transition-colors"
-              >
-                {previewing ? <RefreshCw size={13} className="animate-spin" /> : <Search size={13} />}
-                プレビュー確認
-              </button>
-              <button
-                onClick={add}
-                disabled={adding || !username.trim()}
-                className="flex items-center gap-2 px-4 py-2 bg-[#C9A84C] text-white rounded-full text-sm font-medium hover:bg-[#b8963e] disabled:opacity-50 transition-colors"
-              >
-                {adding ? <RefreshCw size={13} className="animate-spin" /> : <Plus size={13} />}
-                追加する
-              </button>
+              <p className="text-xs text-gray-400 mt-1">@マークあり・なしどちらでもOK。Threads連携が必要です。</p>
             </div>
 
+            {/* Error */}
+            {searchError && (
+              <div className="text-xs text-red-500 bg-red-50 border border-red-100 rounded-xl px-4 py-2.5">
+                {searchError}
+              </div>
+            )}
+
+            {/* Preview card + genre + add button */}
             {preview && (
-              <div className="flex items-center gap-3 p-3 bg-[#FDF8EE] border border-[#C9A84C]/30 rounded-xl">
-                <Avatar src={preview.profile_picture_url} name={preview.username} size={44} />
-                <div className="min-w-0 flex-1">
-                  <p className="font-semibold text-sm text-gray-900">@{preview.username}</p>
-                  {preview.display_name && preview.display_name !== preview.username && (
-                    <p className="text-xs text-gray-500">{preview.display_name}</p>
-                  )}
-                  {preview.bio && <p className="text-xs text-gray-400 mt-0.5 truncate">{preview.bio}</p>}
+              <div className="space-y-3">
+                <div className="flex items-center gap-3 p-4 bg-[#FDF8EE] border border-[#C9A84C]/40 rounded-xl">
+                  <Avatar src={preview.profile_picture_url} name={preview.username} size={48} />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-bold text-sm text-gray-900">@{preview.username}</p>
+                    {preview.display_name && preview.display_name !== preview.username && (
+                      <p className="text-xs text-gray-500">{preview.display_name}</p>
+                    )}
+                    {preview.bio && <p className="text-xs text-gray-400 mt-1 line-clamp-2">{preview.bio}</p>}
+                  </div>
+                  <span className="text-xs text-emerald-600 font-medium bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 flex-shrink-0">
+                    ✓ 確認済み
+                  </span>
                 </div>
-                <span className="text-xs text-[#C9A84C] font-medium bg-white px-2 py-0.5 rounded-full border border-[#C9A84C]/30 flex-shrink-0">
-                  ✓ 取得済み
-                </span>
+
+                {/* Genre selection */}
+                <div>
+                  <label className="text-xs text-gray-500 mb-1.5 block flex items-center gap-1">
+                    <Tag size={10} /> ジャンルを選択（任意）
+                  </label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {GENRES.map(g => (
+                      <button
+                        key={g}
+                        onClick={() => setGenre(genre === g ? '' : g)}
+                        className={`text-xs px-3 py-1 rounded-full border transition-colors ${
+                          genre === g
+                            ? 'bg-[#1E3464] text-white border-[#1E3464]'
+                            : 'border-gray-200 text-gray-500 hover:border-[#1E3464] hover:text-[#1E3464]'
+                        }`}
+                      >
+                        {g}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <button
+                  onClick={add}
+                  disabled={adding}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-[#C9A84C] text-white rounded-full text-sm font-semibold hover:bg-[#b8963e] disabled:opacity-50 transition-colors"
+                >
+                  {adding ? <RefreshCw size={13} className="animate-spin" /> : <Plus size={13} />}
+                  @{preview.username} を追加する
+                </button>
               </div>
             )}
           </div>

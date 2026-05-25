@@ -76,7 +76,7 @@ async def lookup_competitor(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Look up a Threads user profile using the current user's access token."""
+    """Look up a Threads user profile by user ID."""
     token = current_user.threads_access_token
     if not token:
         return {"error": "Threads未連携"}
@@ -95,6 +95,40 @@ async def lookup_competitor(
         "display_name": profile.get("name", profile.get("username", "")),
         "profile_picture_url": profile.get("threads_profile_picture_url"),
         "bio": profile.get("threads_biography"),
+    }
+
+
+@router.get("/search")
+async def search_competitor(
+    q: str = Query(..., description="Username or display name to search"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Search a Threads user by username (with or without @)."""
+    token = current_user.threads_access_token
+    if not token:
+        return {"error": "Threads未連携", "results": []}
+
+    username = q.lstrip("@").strip()
+    client = ThreadsClient(access_token=token)
+    try:
+        profile = await client.search_by_username(username)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"検索失敗: {e}")
+    finally:
+        await client.close()
+
+    if not profile:
+        return {"results": [], "message": "ユーザーが見つかりませんでした"}
+
+    return {
+        "results": [{
+            "threads_user_id": profile.get("id", ""),
+            "username": profile.get("username", username),
+            "display_name": profile.get("name", profile.get("username", username)),
+            "profile_picture_url": profile.get("threads_profile_picture_url"),
+            "bio": profile.get("threads_biography"),
+        }]
     }
 
 
